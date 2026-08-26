@@ -9,14 +9,15 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from app.components.theme import CHART_COLORS
 from cashinho.domain.market import CandleSeries
 from cashinho.pipeline.indicators import IndicatorPanel
 
-UP = "#1F9D55"
-DOWN = "#DC2626"
-VWAP_COLOR = "#7C5BEF"
-BAND_COLOR = "#8A8F98"
-OVERLAY_COLORS = ("#2563EB", "#D97706", "#0891B2", "#BE185D", "#4D7C0F")
+UP = CHART_COLORS["up"]
+DOWN = CHART_COLORS["down"]
+VWAP_COLOR = CHART_COLORS["vwap"]
+BAND_COLOR = CHART_COLORS["band"]
+OVERLAY_COLORS = CHART_COLORS["overlay"]
 
 
 def candlestick_figure(
@@ -94,12 +95,35 @@ def candlestick_figure(
         height=380 + 150 * (len(rows) - 1),
         margin={"l": 45, "r": 20, "t": 60, "b": 30},
         showlegend=True,
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
+        legend={
+            "bgcolor": "rgba(0,0,0,0)",
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "x": 0,
+        },
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
+        hoverlabel={
+            "bgcolor": CHART_COLORS["hover_bg"],
+            "bordercolor": CHART_COLORS["axis"],
+            "font": {"color": CHART_COLORS["hover_text"]},
+        },
         barmode="overlay",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     figure.update_yaxes(title_text="Preço", row=1, col=1)
+    figure.update_xaxes(
+        gridcolor=CHART_COLORS["grid"],
+        linecolor=CHART_COLORS["axis"],
+        zerolinecolor=CHART_COLORS["axis"],
+    )
+    figure.update_yaxes(
+        gridcolor=CHART_COLORS["grid"],
+        linecolor=CHART_COLORS["axis"],
+        zerolinecolor=CHART_COLORS["axis"],
+    )
 
     # Sem os intervalos entre pregoes, o grafico intradiario fica dominado
     # por vazio noturno e o movimento do dia some.
@@ -197,7 +221,7 @@ def _add_oscillators(
                     x=valores.index,
                     y=valores["macd"],
                     name="MACD",
-                    line={"color": "#2563EB", "width": 1.5},
+                    line={"color": OVERLAY_COLORS[0], "width": 1.5},
                 ),
                 row=row,
                 col=1,
@@ -207,7 +231,7 @@ def _add_oscillators(
                     x=valores.index,
                     y=valores["signal"],
                     name="Sinal",
-                    line={"color": "#D97706", "width": 1.3},
+                    line={"color": OVERLAY_COLORS[1], "width": 1.3},
                 ),
                 row=row,
                 col=1,
@@ -221,7 +245,7 @@ def _add_oscillators(
                 x=valores.index,
                 y=valores[coluna],
                 name=label,
-                line={"color": "#2563EB", "width": 1.5},
+                line={"color": OVERLAY_COLORS[0], "width": 1.5},
             ),
             row=row,
             col=1,

@@ -699,6 +699,7 @@ st.plotly_chart(
         panel=panel,
         show_volume=mostrar_volume,
     ),
+    theme="streamlit",
     use_container_width=True,
 )
 

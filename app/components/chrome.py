@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.components.theme import apply_app_theme
 from cashinho.config.settings import Settings, get_settings
 from cashinho.domain.enums import Mode
 from cashinho.version import __version__
@@ -32,18 +33,10 @@ def mode_badge(settings: Settings | None = None) -> None:
     color = _MODE_COLORS.get(settings.mode, "#8A8F98")
     st.markdown(
         f"""
-        <div style="
-            border:1px solid {color};
-            border-left:6px solid {color};
-            border-radius:6px;
-            padding:10px 12px;
-            margin-bottom:12px;
-            background:rgba(0,0,0,0.03);">
-          <div style="font-size:0.70rem;letter-spacing:0.14em;
-                      text-transform:uppercase;opacity:0.65;">Modo</div>
-          <div style="font-size:1.30rem;font-weight:700;color:{color};
-                      line-height:1.25;">{settings.mode.value}</div>
-          <div style="font-size:0.72rem;opacity:0.65;">
+        <div class="cashinho-mode-badge" style="--cashinho-mode-color:{color};">
+          <div class="cashinho-mode-badge__label">Modo</div>
+          <div class="cashinho-mode-badge__value">{settings.mode.value}</div>
+          <div class="cashinho-mode-badge__note">
             execucao real de ordens desativada
           </div>
         </div>
@@ -55,6 +48,7 @@ def mode_badge(settings: Settings | None = None) -> None:
 def sidebar(settings: Settings | None = None) -> None:
     """Barra lateral com modo, versao e origem da configuracao."""
     settings = settings or get_settings()
+    apply_app_theme()
     with st.sidebar:
         mode_badge(settings)
         st.caption(f"Cashinho v{__version__}")
