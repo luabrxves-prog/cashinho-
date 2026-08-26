@@ -22,6 +22,10 @@ PAGES_DIR = Path(__file__).resolve().parents[2] / "app" / "pages"
 def com_metatrader(monkeypatch: pytest.MonkeyPatch) -> None:
     """Liga o MT5 na configuracao do processo, sem terminal por tras."""
     monkeypatch.setenv("CASHINHO_MT5_ENABLED", "true")
+    monkeypatch.setenv(
+        "CASHINHO_MT5_TERMINAL_PATH",
+        r"C:\__cashinho_terminal_inexistente__\terminal64.exe",
+    )
     reset_settings_cache()
     yield
     reset_settings_cache()

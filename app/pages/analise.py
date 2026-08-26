@@ -663,6 +663,7 @@ signal = evaluate_entry_signal(
 series_by_timeframe = {timeframe: closed_series}
 raw_series_by_timeframe = {timeframe: series}
 quality_statuses = [result.report.status]
+ignored_timeframes: list[str] = []
 for context_timeframe in available:
     if context_timeframe is timeframe:
         continue
@@ -674,10 +675,15 @@ for context_timeframe in available:
         start_value=start,
         end_value=end,
     )
-    quality_statuses.append(context_result.report.status)
     if context_result.usable_series is not None:
+        quality_statuses.append(context_result.report.status)
         series_by_timeframe[context_timeframe] = context_result.usable_series
         raw_series_by_timeframe[context_timeframe] = context_result.series
+    else:
+        ignored_timeframes.append(
+            f"{context_timeframe.value}: "
+            f"{context_result.rejection_reason or context_result.report.status.value}"
+        )
 
 timeframe_analyses = analyze_timeframes(series_by_timeframe, selection)
 timeframe_advice = advise_timeframe(timeframe_analyses)
@@ -827,6 +833,29 @@ if st.session_state.get("paper_ticket_context") != ticket_context:
 if open_position is not None and position_decision is not None:
     render_position_card(open_position, position_decision)
 else:
+    if not decision.should_enter and timeframe_analyses:
+        strongest_analysis = max(
+            timeframe_analyses.values(),
+            key=lambda item: item.signal.score,
+        )
+        study_signal = strongest_analysis.signal
+        if study_signal.score > 0:
+            side_label = (
+                "compra"
+                if study_signal.side == "BUY"
+                else "venda"
+                if study_signal.side == "SELL"
+                else "neutra"
+            )
+            st.info(
+                f"Leitura de estudo: **{study_signal.status}** no timeframe "
+                f"**{strongest_analysis.timeframe.value}**, lado **{side_label}**, "
+                f"confiança **{study_signal.score}/100**. "
+                "Ainda não é entrada liberada porque faltam todos os filtros obrigatórios.",
+                icon="🔎",
+            )
+            if study_signal.reasons:
+                st.caption(" · ".join(study_signal.reasons[-2:]))
     if render_decision_card(
         decision,
         symbol=symbol,
@@ -1474,6 +1503,11 @@ with st.expander("Multi-timeframe", expanded=False):
     )
     for reason in timeframe_advice.reasons:
         st.write(f"• {reason}")
+    if ignored_timeframes:
+        st.caption(
+            "Timeframes ignorados por falta de dados suficientes ou qualidade bloqueada: "
+            + " · ".join(ignored_timeframes)
+        )
 
 
 # ============================================================

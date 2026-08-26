@@ -48,10 +48,12 @@ if st.button(
     end = clock.now()
     start = end - timedelta(days=int(lookback))
     decisions = []
+    study_meta = {}
     for symbol in choice.offered_symbols():
         analyses_series = {}
         statuses = []
         timestamps = []
+        ignored = []
         for timeframe in provider.get_available_timeframes(symbol):
             result = load_market_data(
                 provider,
@@ -62,12 +64,14 @@ if st.button(
                 clock=clock,
                 mode=Mode.RESEARCH,
             )
-            statuses.append(result.report.status)
             if result.usable_series is not None:
+                statuses.append(result.report.status)
                 closed = result.usable_series.closed_only()
                 analyses_series[timeframe] = closed
                 if closed.last is not None:
                     timestamps.append(closed.last.close_time)
+            else:
+                ignored.append(f"{timeframe.value}: {result.report.status.value}")
         if not analyses_series:
             continue
         analyses = analyze_timeframes(analyses_series, selection)
@@ -76,6 +80,7 @@ if st.button(
         selected = (
             analyses.get(advice.recommended_timeframe) if advice.recommended_timeframe else None
         )
+        strongest = max(analyses.values(), key=lambda item: item.signal.score)
         if selected and selected.signal.entry is not None and selected.signal.stop is not None:
             try:
                 calculate_ticket_sizing(
@@ -86,7 +91,11 @@ if st.button(
                 risk_approved = True
             except ValueError:
                 pass
-        data_status = max(statuses, key=lambda item: list(type(item)).index(item))
+        data_status = (
+            max(statuses, key=lambda item: list(type(item)).index(item))
+            if statuses
+            else DataStatus.BLOCKED
+        )
         selected_series = (
             analyses_series.get(advice.recommended_timeframe)
             if advice.recommended_timeframe
@@ -112,22 +121,61 @@ if st.button(
             candles_closed=True,
             minimum_risk_reward=settings.risk_profile().min_risk_reward,
         )
+        study_status = (
+            selected.signal.status
+            if selected is not None
+            else strongest.signal.status
+            or decision.primary_reason
+        )
+        study_side = (
+            selected.signal.side
+            if selected is not None and selected.signal.side != "NONE"
+            else strongest.signal.side
+        )
+        study_meta[symbol] = {
+            "status": study_status,
+            "note": " · ".join(ignored) if ignored else "Todos os timeframes carregados.",
+            "side": study_side,
+            "score": selected.signal.score if selected is not None else strongest.signal.score,
+            "timeframe": (
+                selected.timeframe.value if selected is not None else strongest.timeframe.value
+            ),
+        }
         journal_audit_service().record_decision(decision, mode=Mode.RESEARCH)
         decisions.append(decision)
     st.session_state["final_decision_ranking"] = sorted(
-        decisions, key=lambda item: (item.should_enter, item.confidence), reverse=True
+        decisions,
+        key=lambda item: (
+            item.should_enter,
+            study_meta.get(item.symbol, {}).get("score", item.confidence),
+        ),
+        reverse=True,
     )
+    st.session_state["final_decision_study_meta"] = study_meta
 
 ranking = st.session_state.get("final_decision_ranking", [])
+study_meta = st.session_state.get("final_decision_study_meta", {})
 if ranking:
     rows = [
         {
             "Ativo": item.symbol,
             "Decisão": "ENTRADA" if item.should_enter else "NÃO ENTRAR",
-            "Lado": ("COMPRA" if item.side == "BUY" else "VENDA" if item.side == "SELL" else "—"),
-            "Timeframe": item.timeframe.value if item.timeframe else "—",
-            "Confiança": item.confidence,
-            "R:R": item.risk_reward,
+            "Leitura de estudo": study_meta.get(item.symbol, {}).get(
+                "status", item.primary_reason
+            ),
+            "Lado": (
+                "COMPRA"
+                if study_meta.get(item.symbol, {}).get("side", item.side) == "BUY"
+                else "VENDA"
+                if study_meta.get(item.symbol, {}).get("side", item.side) == "SELL"
+                else "—"
+            ),
+            "Timeframe": study_meta.get(item.symbol, {}).get(
+                "timeframe", item.timeframe.value if item.timeframe else "—"
+            ),
+            "Confiança": study_meta.get(item.symbol, {}).get("score", item.confidence),
+            "R:R": item.risk_reward if item.risk_reward is not None else "—",
+            "Observação": item.primary_reason,
         }
         for item in ranking
     ]
@@ -143,6 +191,16 @@ if ranking:
     selected = next(item for item in ranking if item.symbol == selected_symbol)
     st.markdown(f"### {selected.symbol} · {selected.state}")
     st.write(selected.primary_reason)
+    if selected.symbol in study_meta:
+        meta = study_meta[selected.symbol]
+        side_label = "compra" if meta.get("side") == "BUY" else "venda" if meta.get("side") == "SELL" else "neutra"
+        st.info(
+            f"Leitura de estudo: **{meta.get('status')}** no timeframe "
+            f"**{meta.get('timeframe')}**, lado **{side_label}**, "
+            f"confiança **{meta.get('score')}/100**. Isso ainda não é entrada liberada.",
+            icon="🔎",
+        )
+    st.caption(study_meta.get(selected.symbol, {}).get("note", ""))
     with st.expander("Por que essa decisão?"):
         st.caption(
             "Lista dos fatores que pesaram na decisão. Ela ajuda a conferir se o sinal faz sentido."
