@@ -32,7 +32,7 @@ from cashinho.core.time.b3_calendar import B3Calendar  # noqa: E402
 from cashinho.domain.enums import Timeframe  # noqa: E402
 
 SEED = 20260820
-ANCHOR_DATE = date(2026, 8, 19)
+ANCHOR_DATE = date(2026, 8, 26)
 """Ultimo pregao gerado.
 
 Data FIXA, e nao "ontem": ancorar no relogio faria o mesmo comando

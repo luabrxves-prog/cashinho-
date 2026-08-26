@@ -64,6 +64,10 @@ st.info(
     "Ambiente exclusivamente PAPER. Nenhuma ordem é enviada ao MetaTrader ou à corretora.",
     icon="🔒",
 )
+st.caption(
+    "Aqui você acompanha posições e ordens simuladas. Use esta tela para aprender a leitura "
+    "da operação sem risco de execução real."
+)
 
 choice = build_market_data_provider(
     settings, clock, fixtures_root=settings.data_dir / "fixtures"
@@ -151,6 +155,7 @@ summary = summarize_orders(
 )
 
 st.subheader("Resumo do dia")
+st.caption("Resumo financeiro e operacional das ordens PAPER do dia.")
 render_paper_summary(summary)
 for error in market.errors:
     st.caption(error)

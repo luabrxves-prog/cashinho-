@@ -15,8 +15,9 @@ Nenhuma ordem real e enviada ao mercado.
 from __future__ import annotations
 
 import time as time_module
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -56,6 +57,15 @@ from cashinho.pipeline.position_monitoring import evaluate_open_position
 
 INSPECTION_MODE = Mode.RESEARCH
 
+_TIMEFRAME_LABELS = {
+    Timeframe.M1: "1m · muito curto, usado para gatilhos",
+    Timeframe.M5: "5m · curto, padrão da tela de análise",
+    Timeframe.M15: "15m · leitura operacional mais estável",
+    Timeframe.M30: "30m · contexto intradiário",
+    Timeframe.H1: "60m · contexto de tendência",
+    Timeframe.D1: "1D · visão diária",
+}
+
 
 # ============================================================
 # CONFIGURACAO
@@ -82,6 +92,7 @@ choice = build_market_data_provider(
 )
 
 provider = choice.provider
+display_timezone = ZoneInfo(settings.display_timezone)
 
 
 @st.cache_data(ttl=5, show_spinner=False)
@@ -104,6 +115,30 @@ def cached_market_data(
         clock=_clock,
         mode=INSPECTION_MODE,
     )
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_available_period(
+    _provider: object,
+    *,
+    symbol_value: str,
+    timeframe_value: str,
+    display_timezone: str,
+) -> tuple[date, date] | None:
+    """Periodo existente em fontes historicas locais, quando o provider informa."""
+    available_range = getattr(_provider, "available_range", None)
+    if available_range is None:
+        return None
+    try:
+        first, last = available_range(symbol_value, Timeframe(timeframe_value))
+    except (CashinhoError, RuntimeError, ValueError):
+        return None
+    timezone = ZoneInfo(display_timezone)
+    return first.astimezone(timezone).date(), last.astimezone(timezone).date()
+
+
+def _timeframe_label(timeframe: Timeframe) -> str:
+    return _TIMEFRAME_LABELS.get(timeframe, timeframe.value)
 
 
 # ============================================================
@@ -158,13 +193,18 @@ if settings.mode.requires_realtime_data and not choice.realtime:
 # ATIVO / TIMEFRAME / PERIODO
 # ============================================================
 
-col1, col2, col3 = st.columns([1.2, 1, 1])
+col1, col2, col3, col4 = st.columns([1.1, 1, 1, 1])
+default_symbol = "PETR4" if "PETR4" in symbols else symbols[0]
 
 with col1:
     symbol = st.selectbox(
         "Ativo",
         options=symbols,
-        index=0,
+        index=symbols.index(default_symbol),
+        help=(
+            "Papel que será analisado. No modo MT5, o gráfico usa os candles "
+            "recebidos do terminal. No modo CSV, usa dados sintéticos de desenvolvimento."
+        ),
     )
 
 
@@ -180,25 +220,65 @@ except CashinhoError as exc:
     st.stop()
 
 
-timeframe = next((tf for tf in available if tf.value == "5m"), available[0])
-
-
-hoje = datetime.now(UTC).date()
-
+default_timeframe = next((tf for tf in available if tf.value == "5m"), available[0])
 
 with col2:
-    start_date = st.date_input(
-        "Início",
-        value=hoje - timedelta(days=30),
-        format="DD/MM/YYYY",
+    timeframe = st.selectbox(
+        "Timeframe",
+        options=available,
+        index=available.index(default_timeframe),
+        format_func=lambda item: item.value,
+        help=(
+            "Tamanho de cada candle do gráfico. Timeframes menores reagem mais rápido, "
+            "mas oscilam mais; timeframes maiores mostram melhor o contexto."
+        ),
     )
+    st.caption(_timeframe_label(timeframe))
 
+
+hoje = clock.now().astimezone(display_timezone).date()
+available_period = cached_available_period(
+    provider,
+    symbol_value=symbol,
+    timeframe_value=timeframe.value,
+    display_timezone=settings.display_timezone,
+)
+period_start = available_period[0] if available_period else hoje - timedelta(days=30)
+period_end = available_period[1] if available_period else hoje
+default_start = max(period_start, period_end - timedelta(days=30))
 
 with col3:
+    start_date = st.date_input(
+        "Início",
+        value=default_start,
+        min_value=period_start if available_period else None,
+        max_value=period_end if available_period else None,
+        format="DD/MM/YYYY",
+        help=(
+            "Primeiro dia usado para buscar candles. Se o período começar antes dos "
+            "dados disponíveis, o gráfico só mostra o que existe na fonte."
+        ),
+    )
+
+with col4:
     end_date = st.date_input(
         "Fim",
-        value=hoje,
+        value=period_end,
+        min_value=period_start if available_period else None,
+        max_value=period_end if available_period else None,
         format="DD/MM/YYYY",
+        help=(
+            "Último dia do filtro. Em MT5, use hoje para acompanhar o terminal; em CSV, "
+            "o limite é a última data gerada nos arquivos locais."
+        ),
+    )
+
+if available_period is not None:
+    st.caption(
+        "Período disponível nesta fonte: "
+        f"**{period_start.strftime('%d/%m/%Y')}** a "
+        f"**{period_end.strftime('%d/%m/%Y')}**. "
+        "Se a fonte for CSV, esses candles são sintéticos e não atualizam com o mercado."
     )
 
 
@@ -253,6 +333,10 @@ with st.expander(
         usar_sma = st.checkbox(
             "SMA",
             value=True,
+            help=(
+                "Média móvel simples. Ajuda a enxergar a direção média do preço. "
+                "Quanto maior o período, mais lenta e suave ela fica."
+            ),
         )
 
         sma_periods = st.multiselect(
@@ -260,11 +344,19 @@ with st.expander(
             [9, 20, 50, 200],
             default=[20],
             disabled=not usar_sma,
+            help=(
+                "Quantidade de candles usada em cada SMA. Exemplo: SMA 20 em gráfico "
+                "de 5m olha os últimos 20 candles de 5 minutos."
+            ),
         )
 
         usar_ema = st.checkbox(
             "EMA",
             value=True,
+            help=(
+                "Média móvel exponencial. Parecida com a SMA, mas dá mais peso aos "
+                "candles recentes e reage mais rápido."
+            ),
         )
 
         ema_periods = st.multiselect(
@@ -272,6 +364,10 @@ with st.expander(
             [9, 12, 21, 26, 50],
             default=[9, 21],
             disabled=not usar_ema,
+            help=(
+                "Períodos das EMAs no gráfico e no cálculo do sinal. EMAs curtas "
+                "reagem rápido; EMAs longas ajudam a filtrar ruído."
+            ),
         )
 
     # --------------------------------------------------------
@@ -285,6 +381,10 @@ with st.expander(
             "VWAP",
             value=True,
             disabled=not timeframe.is_intraday,
+            help=(
+                "Preço médio ponderado pelo volume do dia. Serve como referência "
+                "intradiária; por isso fica desativado em gráfico diário."
+            ),
         )
 
         if not timeframe.is_intraday:
@@ -293,6 +393,10 @@ with st.expander(
         usar_bb = st.checkbox(
             "Bandas de Bollinger",
             value=False,
+            help=(
+                "Bandas ao redor da média que mostram expansão ou contração da "
+                "volatilidade. Não são compra/venda sozinhas."
+            ),
         )
 
         bb_period = st.number_input(
@@ -301,6 +405,7 @@ with st.expander(
             max_value=200,
             value=20,
             disabled=not usar_bb,
+            help="Quantidade de candles usada para calcular a média das Bandas de Bollinger.",
         )
 
         bb_dev = st.number_input(
@@ -310,6 +415,10 @@ with st.expander(
             value=2.0,
             step=0.5,
             disabled=not usar_bb,
+            help=(
+                "Distância das bandas em relação à média. Valores maiores deixam "
+                "as bandas mais largas."
+            ),
         )
 
     # --------------------------------------------------------
@@ -322,6 +431,10 @@ with st.expander(
         usar_rsi = st.checkbox(
             "RSI",
             value=True,
+            help=(
+                "Oscilador de força relativa. Ajuda a ver se o movimento recente "
+                "está forte ou esticado demais."
+            ),
         )
 
         rsi_period = st.number_input(
@@ -330,16 +443,25 @@ with st.expander(
             max_value=100,
             value=14,
             disabled=not usar_rsi,
+            help="Quantidade de candles usada para calcular o RSI. O padrão comum é 14.",
         )
 
         usar_macd = st.checkbox(
             "MACD (12, 26, 9)",
             value=True,
+            help=(
+                "Compara médias rápidas e lentas para mostrar mudança de ritmo. "
+                "Os números são os períodos padrão do MACD."
+            ),
         )
 
         usar_atr = st.checkbox(
             "ATR",
             value=True,
+            help=(
+                "Mede a volatilidade média. O sistema usa isso para entender o "
+                "tamanho normal do movimento, não para prever direção."
+            ),
         )
 
         atr_period = st.number_input(
@@ -348,11 +470,13 @@ with st.expander(
             max_value=100,
             value=14,
             disabled=not usar_atr,
+            help="Quantidade de candles usada para calcular a volatilidade média do ATR.",
         )
 
     mostrar_volume = st.checkbox(
         "Volume",
         value=True,
+        help="Mostra barras de volume no gráfico. Volume ajuda a avaliar força do movimento.",
     )
 
 
@@ -383,7 +507,16 @@ status_col, acao_col = st.columns([3, 1])
 
 with status_col:
     if st.session_state.monitorando:
-        st.success(f"🟢 AO VIVO · {symbol} · atualização a cada {settings.mt5_refresh_seconds}s")
+        if choice.is_metatrader:
+            st.success(
+                f"🟢 MT5 AO VIVO · {symbol} · atualização a cada "
+                f"{settings.mt5_refresh_seconds}s"
+            )
+        else:
+            st.info(
+                f"🔎 HISTÓRICO CSV · {symbol} · o gráfico usa dados sintéticos locais, "
+                "não cotação em tempo real."
+            )
 
     else:
         st.info(f"⚪ Monitoramento parado · {symbol}")
@@ -395,6 +528,7 @@ with acao_col:
             "■ Parar",
             use_container_width=True,
             key="stop_monitoring",
+            help="Pausa as atualizações da tela. Não cancela ordens nem muda posições.",
         ):
             st.session_state.monitorando = False
             st.rerun()
@@ -405,6 +539,10 @@ with acao_col:
             type="primary",
             use_container_width=True,
             key="start_monitoring",
+            help=(
+                "Carrega os candles do ativo/timeframe selecionado. Com MT5 habilitado, "
+                "a tela atualiza pelo terminal; com CSV, usa histórico sintético local."
+            ),
         ):
             st.session_state.monitorando = True
             st.rerun()
@@ -422,14 +560,26 @@ if not st.session_state.monitorando:
 start = datetime.combine(
     start_date,
     time.min,
-    tzinfo=UTC,
-)
+    tzinfo=display_timezone,
+).astimezone(UTC)
 
-end = datetime.combine(
+requested_end = datetime.combine(
     end_date,
     time.min,
-    tzinfo=UTC,
+    tzinfo=display_timezone,
 ) + timedelta(days=1)
+end = requested_end.astimezone(UTC)
+now = clock.now()
+if end_date >= now.astimezone(display_timezone).date():
+    end = min(end, now)
+
+if end <= start:
+    st.warning(
+        "Ainda não há candle fechado para o período selecionado no horário atual.",
+        icon="⏳",
+    )
+    render_paper_orders(paper_broker)
+    st.stop()
 
 
 # ============================================================
@@ -692,6 +842,16 @@ else:
 
 st.divider()
 st.subheader(f"📈 {symbol} · {timeframe.value}")
+if choice.is_metatrader:
+    st.caption(
+        "Este gráfico usa candles fechados recebidos do MetaTrader 5. "
+        "Com o monitoramento ligado, a tela busca novos candles do terminal."
+    )
+else:
+    st.caption(
+        "Este gráfico usa candles históricos dos CSV locais. Ele serve para estudo e "
+        "desenvolvimento; para atualizar pelo mercado, habilite o MT5 e deixe o terminal aberto."
+    )
 st.plotly_chart(
     candlestick_figure(
         series,
@@ -747,6 +907,10 @@ else:
                 step=100.00,
                 format="%.2f",
                 key="boleta_capital",
+                help=(
+                    "Capital usado apenas para calcular tamanho da simulação PAPER. "
+                    "Não consulta saldo real da corretora."
+                ),
             )
 
         with col_risco:
@@ -758,6 +922,9 @@ else:
                 step=0.10,
                 format="%.2f",
                 key="boleta_risco_pct",
+                help=(
+                    "Percentual máximo do capital que você aceita perder se o stop for atingido."
+                ),
             )
 
         with col_exposicao:
@@ -769,6 +936,9 @@ else:
                 step=1.00,
                 format="%.2f",
                 key="boleta_exposicao_pct",
+                help=(
+                    "Limite de quanto do capital pode ficar concentrado neste ativo."
+                ),
             )
 
         st.session_state.capital_operacional = capital_operacional
@@ -809,11 +979,13 @@ else:
         r1.metric(
             "Risco máximo por operação",
             f"R$ {risco_maximo_reais:,.2f}",
+            help="Valor máximo em reais que a simulação permite arriscar nesta operação.",
         )
 
         r2.metric(
             "Exposição máxima por ativo",
             f"R$ {exposicao_maxima_reais:,.2f}",
+            help="Valor máximo em reais que pode ficar comprado ou vendido neste ativo.",
         )
 
     # ========================================================
@@ -835,6 +1007,10 @@ else:
         index=tipos_ordem.index(tipo_padrao),
         horizontal=True,
         key="paper_order_type",
+        help=(
+            "Define se a simulação é compra ou venda. Nesta fase, apenas Compra e Venda "
+            "limitadas são executadas pelo Paper Broker."
+        ),
     )
 
     ordem_stop = tipo_ordem in {
@@ -867,6 +1043,10 @@ else:
             ],
             index=0,
             key="paper_validity",
+            help=(
+                "Até quando a ordem PAPER poderia ficar pendente. Hoje significa que "
+                "ela vale só para a data atual da simulação."
+            ),
         )
 
     with col_data:
@@ -876,6 +1056,7 @@ else:
                 value=hoje,
                 disabled=True,
                 key="paper_validity_today",
+                help="Data usada quando a validade escolhida é Hoje.",
             )
 
         else:
@@ -884,6 +1065,7 @@ else:
                 value=hoje,
                 min_value=hoje,
                 key="paper_validity_date",
+                help="Última data em que a ordem PAPER pode permanecer válida.",
             )
 
     # ========================================================
@@ -897,6 +1079,10 @@ else:
             "A Mercado",
             value=False,
             key="paper_market_order",
+            help=(
+                "Ordem a mercado executaria pelo melhor preço disponível. Nesta tela "
+                "ela fica bloqueada quando não há bid/ask confiável."
+            ),
         )
 
     with col_preco:
@@ -908,6 +1094,7 @@ else:
             format="%.2f",
             disabled=a_mercado,
             key=f"paper_price_{symbol}",
+            help="Preço de entrada da simulação PAPER. Não envia ordem real ao mercado.",
         )
 
     # ========================================================
@@ -920,6 +1107,10 @@ else:
         "Ativar Gain + Loss",
         value=True,
         key="paper_oco",
+        help=(
+            "Liga a estratégia OCO: um alvo de ganho e um stop de perda. "
+            "Na simulação atual, isso é obrigatório para controlar risco."
+        ),
     )
 
     col_gain, col_loss, col_offset = st.columns(3)
@@ -933,6 +1124,7 @@ else:
             format="%.2f",
             disabled=not usar_oco,
             key=f"paper_gain_{symbol}",
+            help="Preço-alvo da operação. Se chegar nele, a simulação encerra com ganho.",
         )
 
     with col_loss:
@@ -944,6 +1136,7 @@ else:
             format="%.2f",
             disabled=not usar_oco,
             key=f"paper_loss_{symbol}",
+            help="Preço de stop. Se chegar nele, a simulação encerra para limitar perda.",
         )
 
     with col_offset:
@@ -955,6 +1148,10 @@ else:
             format="%.2f",
             disabled=not usar_oco,
             key=f"paper_offset_{symbol}",
+            help=(
+                "Folga de preço usada para preparar ordens stop/limit futuras. "
+                "Hoje é apenas parâmetro visual da boleta PAPER."
+            ),
         )
 
     # ========================================================
@@ -1021,6 +1218,10 @@ else:
                 value=symbol,
                 disabled=True,
                 key="paper_symbol",
+                help=(
+                    "Ativo que veio da análise acima. Ele fica travado para evitar "
+                    "abrir uma boleta no papel errado."
+                ),
             )
 
         qty_key = f"paper_qty_{symbol}_{timeframe.value}"
@@ -1038,6 +1239,10 @@ else:
                 max_value=sizing.quantity,
                 step=1,
                 key=qty_key,
+                help=(
+                    "Número de ações simuladas. O máximo vem do Risk Manager, baseado "
+                    "no capital, risco e distância até o stop."
+                ),
             )
 
         quantidade = int(quantidade)
@@ -1048,6 +1253,7 @@ else:
             st.metric(
                 "Total",
                 f"R$ {total_operacao:,.2f}",
+                help="Preço de entrada multiplicado pela quantidade escolhida.",
             )
 
         # ====================================================
@@ -1065,11 +1271,13 @@ else:
         row1_col1.metric(
             "Risco da ordem",
             f"R$ {risco_ordem:,.2f}",
+            help="Quanto a simulação perderia se o preço batesse no stop.",
         )
 
         row1_col2.metric(
             "Risco máximo",
             f"R$ {sizing.monetary_risk_limit:,.2f}",
+            help="Limite em reais calculado a partir do risco por operação.",
         )
 
         row2_col1, row2_col2 = st.columns(2)
@@ -1077,11 +1285,16 @@ else:
         row2_col1.metric(
             "Exposição",
             f"R$ {exposicao_ordem:,.2f}",
+            help="Valor financeiro total exposto na operação simulada.",
         )
 
         row2_col2.metric(
             "R:R",
             f"{rr_manual:.2f}",
+            help=(
+                "Relação risco-retorno. Exemplo: 2.00 significa buscar ganhar "
+                "duas vezes o valor que está sendo arriscado."
+            ),
         )
 
         st.caption(
@@ -1173,6 +1386,10 @@ else:
             disabled=not pode_simular,
             use_container_width=True,
             key="paper_submit",
+            help=(
+                "Registra a ordem apenas no ambiente PAPER. Nenhuma ordem real é enviada "
+                "ao MetaTrader ou à corretora."
+            ),
         ):
             try:
                 ticket = build_paper_ticket(
@@ -1229,10 +1446,18 @@ st.divider()
 render_paper_orders(paper_broker)
 
 with st.expander("Por que essa decisão?", expanded=False):
+    st.caption(
+        "Resumo em linguagem direta dos motivos que fizeram o sistema liberar, negar "
+        "ou manter a decisão atual."
+    )
     for reason in decision.reasons:
         st.write(f"• {reason}")
 
 with st.expander("Multi-timeframe", expanded=False):
+    st.caption(
+        "Mostra quais tempos de gráfico foram usados como contexto, qual tempo ficou "
+        "como operacional e qual pode servir como gatilho."
+    )
     st.write(
         "Timeframes de contexto:",
         ", ".join(tf.value for tf in timeframe_advice.context_timeframes) or "—",
@@ -1259,6 +1484,10 @@ with st.expander(
     "🩺 Qualidade e origem dos dados",
     expanded=False,
 ):
+    st.caption(
+        "Antes de calcular sinal, o Cashinho verifica se os candles estão completos, "
+        "recentes e coerentes com a fonte usada."
+    )
     quality_panel(
         result.report,
         rejection_reason=result.rejection_reason,
@@ -1274,6 +1503,10 @@ if panel.has_content:
         "📐 Últimos valores dos indicadores",
         expanded=False,
     ):
+        st.caption(
+            "Última leitura calculada de cada indicador. O aquecimento indica quantos "
+            "candles o indicador precisa antes de ficar confiável."
+        )
         linhas = []
 
         for label, resultado in {
@@ -1311,21 +1544,30 @@ with st.expander(
     "📊 Resumo técnico do período",
     expanded=False,
 ):
+    st.caption(
+        "Resumo simples do intervalo escolhido no topo da tela, não uma recomendação de compra ou venda."
+    )
     col1, col2, col3, col4 = st.columns(4)
 
     col1.metric(
         "Candles",
         len(series),
+        help="Quantidade de candles carregados no período filtrado.",
     )
 
     col2.metric(
         "Último fechamento",
         f"R$ {ultimo.close}",
+        help="Preço de fechamento do candle mais recente carregado na tela.",
     )
 
     col3.metric(
         "Variação",
         f"{variacao:.2f}%",
+        help=(
+            "Diferença percentual entre o primeiro preço de abertura e o último "
+            "fechamento do período."
+        ),
     )
 
     col4.metric(
@@ -1334,13 +1576,17 @@ with st.expander(
             ",",
             ".",
         ),
+        help=(
+            "Soma do volume informado pelos candles carregados. Em CSV sintético, "
+            "é apenas dado de desenvolvimento."
+        ),
     )
 
     st.caption(
         f"Período efetivo: "
-        f"{primeiro.timestamp.astimezone().strftime('%d/%m/%Y %H:%M')} "
+        f"{primeiro.timestamp.astimezone(display_timezone).strftime('%d/%m/%Y %H:%M')} "
         f"até "
-        f"{ultimo.close_time.astimezone().strftime('%d/%m/%Y %H:%M')} · "
+        f"{ultimo.close_time.astimezone(display_timezone).strftime('%d/%m/%Y %H:%M')} · "
         f"origem `{series.source}` · "
         f"coleta "
         f"{series.fetched_at.strftime('%H:%M:%S UTC')}"
@@ -1355,8 +1601,17 @@ with st.expander(
     "🗃️ Dados carregados",
     expanded=False,
 ):
+    st.caption(
+        "Tabela com os candles usados no cálculo. É útil para conferir datas, preços, "
+        "volume e origem dos dados."
+    )
+    rows = series.to_records()[-200:]
+    for row in rows:
+        timestamp = row["timestamp"]
+        if isinstance(timestamp, datetime):
+            row["timestamp"] = timestamp.astimezone(display_timezone)
     st.dataframe(
-        series.to_records()[-200:],
+        rows,
         use_container_width=True,
         hide_index=True,
     )
@@ -1368,7 +1623,7 @@ with st.expander(
 # PRECISA SER O ULTIMO BLOCO DO ARQUIVO.
 # ============================================================
 
-if st.session_state.monitorando:
+if st.session_state.monitorando and choice.is_metatrader:
     time_module.sleep(settings.mt5_refresh_seconds)
 
     st.rerun()

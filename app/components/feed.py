@@ -96,9 +96,21 @@ def render_feed_status(choice: ProviderChoice, symbol: str, timezone_name: str) 
         return
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Terminal", "ONLINE")
-    col2.metric("Servidor", info.server or "—")
-    col3.metric("Trading real", "BLOQUEADO", help="Esta fonte e somente leitura.")
+    col1.metric(
+        "Terminal",
+        "ONLINE",
+        help="Indica que o MetaTrader respondeu e está disponível para leitura de dados.",
+    )
+    col2.metric(
+        "Servidor",
+        info.server or "—",
+        help="Servidor da corretora conectado no terminal MetaTrader.",
+    )
+    col3.metric(
+        "Trading real",
+        "BLOQUEADO",
+        help="Esta fonte é somente leitura. O Cashinho não envia ordens reais ao MT5.",
+    )
 
     try:
         status = provider.feed_status(symbol)  # type: ignore[attr-defined]
@@ -116,14 +128,38 @@ def render_quote(quote: Quote, timezone_name: str) -> None:
     """Bid, ask, spread e ultimo negocio - com os dois relogios separados."""
     col1, col2, col3, col4 = st.columns(4)
     if quote.has_active_book:
-        col1.metric("Bid", f"{quote.bid}")
-        col2.metric("Ask", f"{quote.ask}")
-        col3.metric("Spread", f"{quote.spread}")
+        col1.metric(
+            "Bid",
+            f"{quote.bid}",
+            help="Maior preço que compradores estão ofertando agora.",
+        )
+        col2.metric(
+            "Ask",
+            f"{quote.ask}",
+            help="Menor preço que vendedores estão pedindo agora.",
+        )
+        col3.metric(
+            "Spread",
+            f"{quote.spread}",
+            help="Diferença entre ask e bid. Spreads maiores encarecem a operação.",
+        )
     else:
-        col1.metric("Bid", "—")
-        col2.metric("Ask", "—")
+        col1.metric(
+            "Bid",
+            "—",
+            help="Sem preço comprador ativo no livro da fonte.",
+        )
+        col2.metric(
+            "Ask",
+            "—",
+            help="Sem preço vendedor ativo no livro da fonte.",
+        )
         col3.metric("Spread", "—", help="Sem livro ativo: bid e ask zerados na fonte.")
-    col4.metric("Ultimo negocio", f"{quote.price}")
+    col4.metric(
+        "Ultimo negocio",
+        f"{quote.price}",
+        help="Preço do último negócio informado pela fonte, que pode ser mais antigo que bid/ask.",
+    )
 
     st.caption(
         f"Cotacao em {local_time(quote.bid_ask_time, timezone_name)} · "

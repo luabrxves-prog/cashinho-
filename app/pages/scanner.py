@@ -32,9 +32,19 @@ selection = IndicatorSelection(
 st.caption(
     "Somente candles fechados participam das decisões. O ranking não envia ordens ao mercado."
 )
-lookback = st.number_input("Janela de análise (dias)", 5, 365, 60)
+lookback = st.number_input(
+    "Janela de análise (dias)",
+    5,
+    365,
+    60,
+    help="Quantidade de dias que o scanner olha para trás ao avaliar todos os ativos.",
+)
 
-if st.button("Atualizar ranking", type="primary"):
+if st.button(
+    "Atualizar ranking",
+    type="primary",
+    help="Recalcula o ranking usando os candles fechados mais recentes da fonte ativa.",
+):
     end = clock.now()
     start = end - timedelta(days=int(lookback))
     decisions = []
@@ -122,11 +132,21 @@ if ranking:
         for item in ranking
     ]
     st.dataframe(rows, use_container_width=True, hide_index=True)
-    selected_symbol = st.selectbox("Abrir oportunidade", [item.symbol for item in ranking])
+    st.caption(
+        "O primeiro item tende a ser o mais forte pelo critério atual, mas cada linha ainda precisa ser lida."
+    )
+    selected_symbol = st.selectbox(
+        "Abrir oportunidade",
+        [item.symbol for item in ranking],
+        help="Escolha uma linha do ranking para ver o motivo detalhado da decisão.",
+    )
     selected = next(item for item in ranking if item.symbol == selected_symbol)
     st.markdown(f"### {selected.symbol} · {selected.state}")
     st.write(selected.primary_reason)
     with st.expander("Por que essa decisão?"):
+        st.caption(
+            "Lista dos fatores que pesaram na decisão. Ela ajuda a conferir se o sinal faz sentido."
+        )
         for reason in selected.reasons:
             st.write(f"• {reason}")
 else:

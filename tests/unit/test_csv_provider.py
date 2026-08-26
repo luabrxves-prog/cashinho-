@@ -98,6 +98,22 @@ def test_intervalo_e_semiaberto(provider: CsvHistoricalProvider) -> None:
     assert serie.candles[-1].open_time == BASE + timedelta(minutes=5)
 
 
+def test_nao_entrega_candle_com_fechamento_no_futuro(tmp_path: Path) -> None:
+    """CSV pode conter o dia todo, mas a tela so pode ver candle ja fechado."""
+    _write(tmp_path, "PETR4", Timeframe.M5, _rows(4))
+    provider = CsvHistoricalProvider(tmp_path, FrozenClock(BASE + timedelta(minutes=10)))
+
+    serie = provider.get_candles(
+        "PETR4",
+        Timeframe.M5,
+        start=BASE,
+        end=BASE + timedelta(hours=1),
+    )
+
+    assert len(serie) == 2
+    assert serie.candles[-1].close_time == BASE + timedelta(minutes=10)
+
+
 def test_periodo_sem_dados_devolve_serie_vazia(provider: CsvHistoricalProvider) -> None:
     """Vazio e retorno valido; classificar isso cabe ao portao."""
     serie = provider.get_candles(

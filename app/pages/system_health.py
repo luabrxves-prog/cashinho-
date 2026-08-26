@@ -25,17 +25,34 @@ MONITORED_SYMBOL = "PETR4"
 settings = get_settings()
 sidebar(settings)
 page_header("System Health", "Estado tecnico verificavel do sistema")
+st.caption(
+    "Diagnóstico técnico do app: relógio, banco de dados e fonte de mercado. "
+    "Use esta tela quando algo parecer desatualizado."
+)
 
 clock = SystemClock()
 calendar = B3Calendar()
 now = clock.now()
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Versao do codigo", __version__)
-col2.metric("Relogio", clock.kind)
-col3.metric("Hash da configuracao", settings.config_hash())
+col1.metric(
+    "Versao do codigo",
+    __version__,
+    help="Versão do Cashinho que está rodando nesta máquina.",
+)
+col2.metric(
+    "Relogio",
+    clock.kind,
+    help="Origem do horário usado pelo app para filtros, auditoria e simulações.",
+)
+col3.metric(
+    "Hash da configuracao",
+    settings.config_hash(),
+    help="Assinatura curta da configuração carregada. Ajuda a perceber se o ambiente mudou.",
+)
 
 st.subheader("Tempo")
+st.caption("Compara o horário interno em UTC com o horário local da B3.")
 st.write(f"Instante logico (UTC): `{now.isoformat()}`")
 st.write(f"Horario local da B3: `{calendar.to_local(now).strftime('%d/%m/%Y %H:%M:%S')}`")
 if calendar.is_open(now):
@@ -50,6 +67,7 @@ if not calendar.holidays_loaded:
     )
 
 st.subheader("Banco de dados")
+st.caption("Verifica se o diário, decisões e ordens PAPER conseguem ser gravados.")
 try:
     engine = create_db_engine(settings)
     init_db(engine)
@@ -58,6 +76,7 @@ except Exception as exc:  # a tela deve mostrar a falha, nao quebrar
     st.error(f"Falha ao conectar: {exc}", icon="⛔")
 
 st.subheader("Dados de mercado")
+st.caption("Mostra se o app está usando MT5 ao vivo ou uma fonte histórica/local.")
 choice = build_market_data_provider(settings, clock)
 st.write(f"Provider ativo: `{choice.provider.capabilities.name}` — {choice.reason}")
 render_feed_status(choice, MONITORED_SYMBOL, settings.display_timezone)

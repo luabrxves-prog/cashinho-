@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = Field(default="console", pattern="^(console|json)$")
     display_timezone: str = "America/Sao_Paulo"
-    capital: Decimal = Decimal("100000.00")
+    capital: Decimal = Decimal("100.00")
 
     # --- MetaTrader 5 (somente Market Data) -------------------------------
     # Nenhuma credencial da corretora aqui, e nao deve haver (regra 7): quem

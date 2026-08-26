@@ -31,14 +31,37 @@ def render_decision_card(
             side_label = "COMPRA" if decision.side == "BUY" else "VENDA"
             st.success(f"## 🟢 ENTRADA LIBERADA\n### {side_label}")
             entry_col, stop_col, target_col, rr_col = st.columns(4)
-            entry_col.metric("Entrada", f"R$ {decision.entry:.2f}")
-            stop_col.metric("Stop", f"R$ {decision.stop:.2f}")
-            target_col.metric("Alvo", f"R$ {decision.target:.2f}")
-            rr_col.metric("R:R", f"{decision.risk_reward:.2f}")
+            entry_col.metric(
+                "Entrada",
+                f"R$ {decision.entry:.2f}",
+                help="Preço de referência para abrir a operação PAPER.",
+            )
+            stop_col.metric(
+                "Stop",
+                f"R$ {decision.stop:.2f}",
+                help="Preço em que a perda simulada seria limitada.",
+            )
+            target_col.metric(
+                "Alvo",
+                f"R$ {decision.target:.2f}",
+                help="Preço em que o ganho planejado seria realizado.",
+            )
+            rr_col.metric(
+                "R:R",
+                f"{decision.risk_reward:.2f}",
+                help="Relação entre ganho potencial e perda no stop. Quanto maior, melhor a folga.",
+            )
             confidence_col, button_col = st.columns([1, 2])
-            confidence_col.metric("Confiança", f"{decision.confidence}/100")
+            confidence_col.metric(
+                "Confiança",
+                f"{decision.confidence}/100",
+                help="Pontuação interna do sinal. Não é probabilidade garantida de acerto.",
+            )
             open_ticket = button_col.button(
-                "ABRIR BOLETA PAPER", type="primary", use_container_width=True
+                "ABRIR BOLETA PAPER",
+                type="primary",
+                use_container_width=True,
+                help="Abre a boleta simulada para revisar quantidade, risco, stop e alvo antes de registrar.",
             )
         else:
             st.info("## ⚪ NÃO ENTRAR")

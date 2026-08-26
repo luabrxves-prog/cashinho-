@@ -23,7 +23,7 @@ class RiskProfile(DomainModel):
     """
 
     name: str = "default"
-    capital: Money = Decimal("100000.00")
+    capital: Money = Decimal("100.00")
 
     risk_per_trade_pct: Decimal = Field(
         default=Decimal("0.5"), gt=0, le=100, description="Risco maximo por operacao (%)"

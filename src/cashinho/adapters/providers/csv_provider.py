@@ -104,6 +104,18 @@ class CsvHistoricalProvider:
                 available.append(timeframe)
         return tuple(available)
 
+    def available_range(self, symbol: str, timeframe: Timeframe) -> tuple[datetime, datetime] | None:
+        """Primeiro e ultimo instante disponiveis no arquivo local."""
+        path = self._path_for(symbol.upper(), timeframe)
+        rows = self._read_rows(path)
+        if not rows:
+            return None
+        candles = [
+            self._to_candle(row, timeframe, path.name)
+            for row in (rows[0], rows[-1])
+        ]
+        return candles[0].open_time, candles[-1].close_time
+
     def get_candles(
         self,
         symbol: str,
@@ -112,7 +124,7 @@ class CsvHistoricalProvider:
         start: datetime,
         end: datetime,
     ) -> CandleSeries:
-        """Candles com `start <= open_time < end`.
+        """Candles com `start <= open_time < end` e fechamento ja conhecido.
 
         Uma serie vazia e retorno valido, nao excecao: cabe ao portao de
         qualidade classificar o vazio e bloquear a analise. Excecao aqui
@@ -134,10 +146,11 @@ class CsvHistoricalProvider:
         except RawRowError as exc:
             raise ProviderError(str(exc)) from exc
 
+        logical_now = self._clock.now()
         candles = tuple(
             candle
             for candle in (self._to_candle(row, timeframe, path.name) for row in rows)
-            if start_utc <= candle.open_time < end_utc
+            if start_utc <= candle.open_time < end_utc and candle.close_time <= logical_now
         )
 
         logger.info(

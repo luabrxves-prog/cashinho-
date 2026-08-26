@@ -17,12 +17,36 @@ def _value(value: object, suffix: str = "") -> str:
 def render_backtest_result(result: BacktestResult, *, initial_capital: object) -> None:
     metrics = result.metrics
     cards = st.columns(6)
-    cards[0].metric("Trades", metrics.total_trades)
-    cards[1].metric("Win rate", _value(metrics.win_rate, "%"))
-    cards[2].metric("Profit factor", _value(metrics.profit_factor))
-    cards[3].metric("Expectancy", _value(metrics.expectancy))
-    cards[4].metric("Resultado", f"R$ {metrics.net_profit:,.2f}")
-    cards[5].metric("Max drawdown", f"R$ {metrics.max_drawdown:,.2f}")
+    cards[0].metric(
+        "Trades",
+        metrics.total_trades,
+        help="Quantidade de operações concluídas neste recorte do backtest.",
+    )
+    cards[1].metric(
+        "Win rate",
+        _value(metrics.win_rate, "%"),
+        help="Percentual de operações vencedoras. Sozinho, não mede qualidade da estratégia.",
+    )
+    cards[2].metric(
+        "Profit factor",
+        _value(metrics.profit_factor),
+        help="Relação entre lucro bruto e perda bruta. Acima de 1 indica lucro bruto maior que perda bruta.",
+    )
+    cards[3].metric(
+        "Expectancy",
+        _value(metrics.expectancy),
+        help="Resultado médio esperado por operação no histórico simulado.",
+    )
+    cards[4].metric(
+        "Resultado",
+        f"R$ {metrics.net_profit:,.2f}",
+        help="Lucro ou prejuízo final da simulação depois dos custos informados.",
+    )
+    cards[5].metric(
+        "Max drawdown",
+        f"R$ {metrics.max_drawdown:,.2f}",
+        help="Maior queda observada na curva de capital durante o período.",
+    )
 
     if not result.trades:
         st.info("Nenhuma FinalDecision liberou e concluiu uma operação neste recorte.")
@@ -34,8 +58,10 @@ def render_backtest_result(result: BacktestResult, *, initial_capital: object) -
         "Data"
     )
     chart_left.markdown("#### Curva de capital")
+    chart_left.caption("Evolução simulada do capital ao longo dos trades.")
     chart_left.line_chart(equity)
     chart_right.markdown("#### Drawdown")
+    chart_right.caption("Queda percentual desde o topo anterior da curva.")
     chart_right.line_chart(drawdown)
 
     rows = [
@@ -56,10 +82,12 @@ def render_backtest_result(result: BacktestResult, *, initial_capital: object) -
         for trade in result.trades
     ]
     st.markdown("#### Trades")
+    st.caption("Lista operação por operação, com entrada, saída, resultado e custos.")
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
     reasons = Counter(trade.close_reason for trade in result.trades)
     st.markdown("#### Encerramentos por motivo")
+    st.caption("Mostra se as saídas ocorreram por stop, alvo, posição gerenciada ou outro motivo.")
     st.dataframe(
         [
             {
@@ -79,6 +107,7 @@ def render_backtest_result(result: BacktestResult, *, initial_capital: object) -
     )
     side_col, timeframe_col = st.columns(2)
     side_col.markdown("#### Por BUY/SELL")
+    side_col.caption("Resultado separado por lado da operação: compra ou venda.")
     side_col.dataframe(
         [
             {
@@ -94,6 +123,7 @@ def render_backtest_result(result: BacktestResult, *, initial_capital: object) -
         use_container_width=True,
     )
     timeframe_col.markdown("#### Por timeframe")
+    timeframe_col.caption("Resultado separado pelo tempo gráfico que originou o sinal.")
     timeframe_col.dataframe(
         [
             {
@@ -133,9 +163,14 @@ def render_backtest_comparison(
             }
         )
     st.markdown("### Comparação das formas de saída")
+    st.caption(
+        "Compara a saída simples por stop/alvo com a saída que usa o Position Manager."
+    )
     st.dataframe(rows, use_container_width=True, hide_index=True)
     fixed_tab, dynamic_tab = st.tabs(["MODO A", "MODO B"])
     with fixed_tab:
+        st.caption("Modo A encerra operações apenas por stop e alvo planejados.")
         render_backtest_result(comparison.fixed, initial_capital=initial_capital)
     with dynamic_tab:
+        st.caption("Modo B permite que o Position Manager antecipe ou mantenha a saída.")
         render_backtest_result(comparison.dynamic, initial_capital=initial_capital)

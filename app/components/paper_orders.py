@@ -34,6 +34,9 @@ def order_rows(orders: list[PaperOrder]) -> list[dict[str, Any]]:
 def render_paper_orders(broker: PaperBroker, *, expanded: bool = False) -> None:
     orders = broker.list_orders()
     with st.expander(f"📋 Ordens PAPER ({len(orders)})", expanded=expanded):
+        st.caption(
+            "Lista das ordens simuladas. Elas existem apenas no Paper Broker do app."
+        )
         if not orders:
             st.caption("Nenhuma ordem PAPER registrada.")
             return
@@ -49,8 +52,13 @@ def render_paper_orders(broker: PaperBroker, *, expanded: bool = False) -> None:
                     f"{order.ticket.side} {order.ticket.quantity}"
                 ),
                 key="paper_cancel_order",
+                help="Escolha qual ordem PAPER pendente será cancelada.",
             )
-            if st.button("Cancelar ordem PENDING", key="paper_cancel_button"):
+            if st.button(
+                "Cancelar ordem PENDING",
+                key="paper_cancel_button",
+                help="Cancela apenas a ordem simulada, sem qualquer envio ao MT5 ou corretora.",
+            ):
                 broker.cancel_order(selected.id)
                 st.success(f"Ordem PAPER {selected.id[:8]} cancelada.")
                 st.rerun()

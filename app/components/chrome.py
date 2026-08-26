@@ -52,6 +52,7 @@ def sidebar(settings: Settings | None = None) -> None:
     with st.sidebar:
         mode_badge(settings)
         st.caption(f"Cashinho v{__version__}")
+        st.caption("Modo indica quais ações são permitidas. Ordem real segue bloqueada.")
         st.caption(f"config `{settings.config_hash()}`")
         st.caption(f"fuso de exibicao: {settings.display_timezone}")
         if settings.mode.touches_real_money:

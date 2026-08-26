@@ -25,6 +25,10 @@ settings = get_settings()
 clock = SystemClock()
 sidebar(settings)
 page_header("Dashboard", "Decisões auditadas e operação PAPER")
+st.caption(
+    "Visão geral do que o Cashinho já decidiu, simulou e mantém em aberto. "
+    "Use os ícones de ajuda para entender cada número antes de agir."
+)
 
 choice = build_market_data_provider(
     settings, clock, fixtures_root=settings.data_dir / "fixtures"
@@ -38,15 +42,37 @@ if choice.is_metatrader:
 
 profile = settings.risk_profile()
 source_top = st.columns(3)
-source_top[0].metric("Provider", choice.provider.capabilities.name)
-source_top[1].metric(
-    "Tempo real", "SIM" if choice.provider.capabilities.supports_realtime else "NÃO"
+source_top[0].metric(
+    "Provider",
+    choice.provider.capabilities.name,
+    help="Fonte de dados ativa agora. Pode ser MT5 em tempo real ou CSV histórico local.",
 )
-source_top[2].metric("Status do feed", feed_status)
+source_top[1].metric(
+    "Tempo real",
+    "SIM" if choice.provider.capabilities.supports_realtime else "NÃO",
+    help="Mostra se a fonte consegue trazer cotação atual do mercado.",
+)
+source_top[2].metric(
+    "Status do feed",
+    feed_status,
+    help="Estado do dado para o ativo monitorado. Offline ou histórico não deve ser tratado como ao vivo.",
+)
 account_top = st.columns(3)
-account_top[0].metric("Modo", settings.mode.value)
-account_top[1].metric("Capital", money(profile.capital))
-account_top[2].metric("Risco por operação", f"{profile.risk_per_trade_pct}%")
+account_top[0].metric(
+    "Modo",
+    settings.mode.value,
+    help="Modo operacional carregado da configuração. Ele define quais travas do sistema ficam ativas.",
+)
+account_top[1].metric(
+    "Capital",
+    money(profile.capital),
+    help="Capital usado como base para calcular tamanho de posição e risco máximo.",
+)
+account_top[2].metric(
+    "Risco por operação",
+    f"{profile.risk_per_trade_pct}%",
+    help="Percentual máximo do capital que uma única operação PAPER pode arriscar.",
+)
 
 broker, _audit = build_paper_broker()
 orders = broker.list_orders()
@@ -75,18 +101,40 @@ with journal_session_factory()() as session:
 
 st.divider()
 st.subheader("Resumo")
+st.caption("Números do dia e da carteira PAPER simulada. Eles não representam ordens reais.")
 first = st.columns(3)
-first[0].metric("Entradas liberadas hoje", released_today)
-first[1].metric("Operações PAPER abertas", summary.open_positions)
-first[2].metric("P&L PAPER realizado", money(summary.realized_pnl))
+first[0].metric(
+    "Entradas liberadas hoje",
+    released_today,
+    help="Quantidade de decisões auditadas hoje que liberaram entrada.",
+)
+first[1].metric(
+    "Operações PAPER abertas",
+    summary.open_positions,
+    help="Posições simuladas que ainda estão abertas no Paper Broker.",
+)
+first[2].metric(
+    "P&L PAPER realizado",
+    money(summary.realized_pnl),
+    help="Resultado financeiro das operações PAPER já encerradas.",
+)
 second = st.columns(2)
-second[0].metric("P&L PAPER aberto", money(summary.unrealized_pnl))
-second[1].metric("Risco em uso", money(summary.exposed_risk))
+second[0].metric(
+    "P&L PAPER aberto",
+    money(summary.unrealized_pnl),
+    help="Resultado estimado das posições abertas usando a cotação disponível.",
+)
+second[1].metric(
+    "Risco em uso",
+    money(summary.exposed_risk),
+    help="Soma do risco que ainda está exposto nas posições simuladas.",
+)
 if summary.unpriced_positions:
     st.caption("P&L aberto oculto porque não há cotação válida para todas as posições.")
 
 st.divider()
 st.subheader("Últimas decisões")
+st.caption("Histórico recente do que a inteligência decidiu para análise, entrada ou posição.")
 if decisions or position_decisions:
     st.dataframe(
         operational_decision_rows(decisions, position_decisions)[:20],
@@ -98,10 +146,14 @@ else:
 
 st.divider()
 st.subheader("Últimas operações")
+st.caption("Registros mais recentes de ordens e fechamentos no ambiente PAPER.")
 if trades:
     st.dataframe(paper_trade_rows(trades), use_container_width=True, hide_index=True)
 else:
     st.info("Nenhuma operação PAPER auditada ainda.")
 
 with st.expander("Status detalhado do feed"):
+    st.caption(
+        "Mostra terminal, servidor, cotação e motivo do status da fonte de dados atual."
+    )
     render_feed_status(choice, MONITORED_SYMBOL, settings.display_timezone)

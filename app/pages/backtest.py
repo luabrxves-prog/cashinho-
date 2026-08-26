@@ -27,6 +27,10 @@ settings = get_settings()
 clock = SystemClock()
 sidebar(settings)
 page_header("Backtest", "Validação histórica candle a candle da FinalDecision")
+st.caption(
+    "Use esta tela para testar como a regra teria se comportado em candles passados. "
+    "É uma simulação técnica, não uma promessa de resultado."
+)
 
 st.warning(
     "Resultados históricos não garantem resultados futuros. O backtest é somente analítico e "
@@ -43,12 +47,26 @@ if not symbols:
     st.stop()
 
 input_row = st.columns(3)
-symbol = input_row[0].selectbox("Ativo", symbols)
+default_symbol = "PETR4" if "PETR4" in symbols else symbols[0]
+symbol = input_row[0].selectbox(
+    "Ativo",
+    symbols,
+    index=symbols.index(default_symbol),
+    help="Papel que será usado no teste histórico.",
+)
 today = clock.now().date()
 start_date = input_row[1].date_input(
-    "Início", value=today - timedelta(days=90), format="DD/MM/YYYY"
+    "Início",
+    value=today - timedelta(days=90),
+    format="DD/MM/YYYY",
+    help="Primeiro dia do histórico usado no backtest.",
 )
-end_date = input_row[2].date_input("Fim", value=today, format="DD/MM/YYYY")
+end_date = input_row[2].date_input(
+    "Fim",
+    value=today,
+    format="DD/MM/YYYY",
+    help="Último dia do histórico usado no backtest.",
+)
 if start_date > end_date:
     st.error("A data inicial não pode ser posterior à final.")
     st.stop()
@@ -57,29 +75,75 @@ capital_row = st.columns(4)
 capital = Decimal(
     str(
         capital_row[0].number_input(
-            "Capital inicial (R$)", min_value=1.0, value=float(settings.capital), step=100.0
+            "Capital inicial (R$)",
+            min_value=1.0,
+            value=float(settings.capital),
+            step=100.0,
+            help="Valor inicial usado para calcular risco, tamanho das posições e curva de capital.",
         )
     )
 )
 spread = Decimal(
-    str(capital_row[1].number_input("Spread por unidade", min_value=0.0, value=0.0, step=0.01))
+    str(
+        capital_row[1].number_input(
+            "Spread por unidade",
+            min_value=0.0,
+            value=0.0,
+            step=0.01,
+            help="Custo estimado entre compra e venda de cada unidade negociada.",
+        )
+    )
 )
 slippage = Decimal(
     str(
         capital_row[2].number_input(
-            "Slippage por unidade", min_value=0.0, value=0.0, step=0.01
+            "Slippage por unidade",
+            min_value=0.0,
+            value=0.0,
+            step=0.01,
+            help="Diferença simulada entre o preço esperado e o preço executado.",
         )
     )
 )
 fixed_fee = Decimal(
-    str(capital_row[3].number_input("Taxa fixa por ordem", min_value=0.0, value=0.0, step=0.01))
+    str(
+        capital_row[3].number_input(
+            "Taxa fixa por ordem",
+            min_value=0.0,
+            value=0.0,
+            step=0.01,
+            help="Custo fixo simulado cobrado a cada ordem do backtest.",
+        )
+    )
 )
 
 split_row = st.columns(3)
-train_pct = int(split_row[0].number_input("TRAIN (%)", 10, 80, 60, 5))
-validation_pct = int(split_row[1].number_input("VALIDATION (%)", 10, 40, 20, 5))
+train_pct = int(
+    split_row[0].number_input(
+        "TRAIN (%)",
+        10,
+        80,
+        60,
+        5,
+        help="Primeira parte do histórico. Serve para observar o comportamento inicial da regra.",
+    )
+)
+validation_pct = int(
+    split_row[1].number_input(
+        "VALIDATION (%)",
+        10,
+        40,
+        20,
+        5,
+        help="Parte intermediária do histórico. Ajuda a verificar se o resultado se mantém fora do treino.",
+    )
+)
 test_pct = 100 - train_pct - validation_pct
-split_row[2].metric("TEST (%)", test_pct)
+split_row[2].metric(
+    "TEST (%)",
+    test_pct,
+    help="Parte final do histórico. Fica reservada para avaliação fora das amostras anteriores.",
+)
 if test_pct <= 0:
     st.error("TRAIN + VALIDATION deve deixar uma amostra TEST positiva.")
     st.stop()
@@ -89,7 +153,12 @@ st.caption(
     "de parâmetros nesta versão."
 )
 
-if st.button("EXECUTAR BACKTEST", type="primary", use_container_width=True):
+if st.button(
+    "EXECUTAR BACKTEST",
+    type="primary",
+    use_container_width=True,
+    help="Roda a simulação candle a candle usando os filtros e custos definidos acima.",
+):
     start = datetime.combine(start_date, time.min, tzinfo=UTC)
     end = datetime.combine(end_date, time.min, tzinfo=UTC) + timedelta(days=1)
     series_by_timeframe = {}
@@ -173,9 +242,13 @@ saved = st.session_state.get("backtest_results")
 if saved:
     tabs = st.tabs(["GERAL", "TRAIN", "VALIDATION", "TEST"])
     with tabs[0]:
+        st.caption("Resultado considerando todo o período escolhido.")
         render_backtest_comparison(saved["overall"], initial_capital=saved["capital"])
     for tab, label in zip(tabs[1:], ("TRAIN", "VALIDATION", "TEST"), strict=True):
         with tab:
+            st.caption(
+                f"Resultado apenas da amostra {label}. Compare com as outras abas antes de confiar no padrão."
+            )
             result = saved["segments"].get(label)
             if result is None:
                 st.info("Amostra sem candles suficientes.")

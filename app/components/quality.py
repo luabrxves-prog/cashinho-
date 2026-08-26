@@ -42,14 +42,29 @@ def quality_panel(report: DataQualityReport, *, rejection_reason: str | None = N
         )
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Origem", report.source)
-    col2.metric("Candles", report.candles_evaluated)
-    col3.metric("Verificado em", report.checked_at.strftime("%H:%M:%S UTC"))
+    col1.metric(
+        "Origem",
+        report.source,
+        help="Fonte dos candles avaliados: MT5, CSV ou outra origem configurada.",
+    )
+    col2.metric(
+        "Candles",
+        report.candles_evaluated,
+        help="Quantidade de candles conferidos antes de liberar o cálculo.",
+    )
+    col3.metric(
+        "Verificado em",
+        report.checked_at.strftime("%H:%M:%S UTC"),
+        help="Horário UTC em que a qualidade dos dados foi conferida.",
+    )
 
     if not report.issues:
         return
 
     with st.expander(f"Problemas identificados ({len(report.issues)})", expanded=report.blocked):
+        st.caption(
+            "Problemas que podem reduzir a confiança no sinal ou bloquear a análise."
+        )
         for issue in report.issues:
             icon = _SEVERITY_ICON.get(issue.severity, "•")
             st.markdown(f"{icon} **{issue.code}** — {issue.message}")

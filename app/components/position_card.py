@@ -26,14 +26,36 @@ def render_position_card(position: PaperOrder, decision: PositionDecision) -> No
         side.markdown(f"### {side_label}")
 
         first = st.columns(4)
-        first[0].metric("Entrada", _money(position.fill_price))
-        first[1].metric("Preço atual", _money(decision.current_price))
-        first[2].metric("Stop", _money(position.ticket.stop))
-        first[3].metric("Alvo", _money(position.ticket.target))
+        first[0].metric(
+            "Entrada",
+            _money(position.fill_price),
+            help="Preço em que a posição PAPER foi aberta.",
+        )
+        first[1].metric(
+            "Preço atual",
+            _money(decision.current_price),
+            help="Preço usado para avaliar a posição agora.",
+        )
+        first[2].metric(
+            "Stop",
+            _money(position.ticket.stop),
+            help="Preço de saída planejado para limitar a perda.",
+        )
+        first[3].metric(
+            "Alvo",
+            _money(position.ticket.target),
+            help="Preço de saída planejado para realizar o ganho.",
+        )
         second = st.columns(2)
-        second[0].metric("Resultado", _money(result.pnl_value if result else None))
+        second[0].metric(
+            "Resultado",
+            _money(result.pnl_value if result else None),
+            help="Lucro ou prejuízo estimado da posição aberta.",
+        )
         second[1].metric(
-            "Resultado em R", "—" if result is None else f"{result.result_in_r:+.2f}R"
+            "Resultado em R",
+            "—" if result is None else f"{result.result_in_r:+.2f}R",
+            help="Resultado medido em múltiplos do risco inicial. +1R significa ganhar o que estava arriscado.",
         )
 
         if decision.action is PositionAction.HOLD:
