@@ -291,9 +291,12 @@ class MetaTraderMarketDataProvider:
             raise MetaTraderProviderError(str(exc)) from exc
 
         now = self._clock.now()
+        snapshot_time = self._rates_snapshot_time(raw, now)
         candles = tuple(
             candle
-            for candle in (self._to_candle(row, timeframe, now) for row in raw)
+            for candle in (
+                self._to_candle(row, timeframe, snapshot_time) for row in raw
+            )
             if candle is not None and start_utc <= candle.open_time < end_utc
         )
 
@@ -430,6 +433,21 @@ class MetaTraderMarketDataProvider:
             )
         except (KeyError, TypeError, ValueError, InvalidOperation):
             return None
+
+    def _rates_snapshot_time(
+        self, rows: tuple[dict[str, Any], ...], fallback: datetime
+    ) -> datetime:
+        """Instante minimo da foto dos candles retornados pelo MT5."""
+        opened_at: list[datetime] = []
+        for row in rows:
+            raw_time = row.get("time")
+            if raw_time is None:
+                continue
+            try:
+                opened_at.append(self._time.to_utc(raw_time))
+            except (TypeError, ValueError, OverflowError):
+                continue
+        return max((fallback, *opened_at))
 
     def _candle_count(self, timeframe: Timeframe, start: datetime, end: datetime) -> int:
         """Quantos candles pedir ao terminal para cobrir o intervalo."""

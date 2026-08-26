@@ -25,6 +25,7 @@ from tests.unit.fake_mt5 import (
     FakeMetaTrader5,
     quote_tick,
     rate,
+    server_epoch,
     trade_tick,
 )
 
@@ -353,6 +354,28 @@ def test_o_candle_em_formacao_vem_marcado_e_nao_descartado() -> None:
 
     assert series.has_open_candle is True
     assert len(series.closed_only()) == len(series) - 1
+
+
+def test_virada_de_candle_nao_marca_o_anterior_como_aberto() -> None:
+    """Se o servidor ja mostra o candle novo, o anterior foi fechado."""
+    turn = datetime(2026, 8, 20, 17, 33, tzinfo=UTC)
+    local_before_turn = turn - timedelta(milliseconds=100)
+
+    previous = rate(0)
+    previous["time"] = int(server_epoch(turn - timedelta(minutes=1)))
+    current = rate(0)
+    current["time"] = int(server_epoch(turn))
+    library = FakeMetaTrader5(rates=[previous, current])
+
+    series = build(library, now=local_before_turn).get_candles(
+        "PETR4",
+        Timeframe.M1,
+        start=turn - timedelta(minutes=5),
+        end=turn + timedelta(minutes=1),
+    )
+
+    assert [candle.is_closed for candle in series.candles] == [True, False]
+    assert series.has_open_candle is True
 
 
 def test_candles_ja_fechados_nao_sao_cortados() -> None:
