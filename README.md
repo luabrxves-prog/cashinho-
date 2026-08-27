@@ -22,6 +22,11 @@ documenta os princípios usados no Modo Estudo Profundo: mercado antes do ativo,
 ativo antes do timeframe, timeframe antes do gatilho e risco em reais antes da
 boleta.
 
+A validação contra situações históricas fica em
+[`docs/HISTORICAL_SCENARIO_TESTING.md`](docs/HISTORICAL_SCENARIO_TESTING.md).
+Ela roda uma bateria de cenários via `scripts/run_scenario_suite.py` e marca
+como `SKIP` qualquer janela que ainda não tenha CSV real local.
+
 ## Requisitos
 
 - Python 3.11 ou superior

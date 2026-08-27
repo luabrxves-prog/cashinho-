@@ -207,6 +207,25 @@ def test_avaliador_historico_retorna_a_final_decision_de_producao() -> None:
     assert decision.timestamp <= REFERENCE_INSTANT
 
 
+def test_avaliador_historico_inclui_estudo_do_mercado_amplo() -> None:
+    evaluator = PipelineDecisionEvaluator(
+        IndicatorSelection(),
+        PROFILE,
+        market_series_by_symbol={
+            "VALE3": {
+                Timeframe.H1: make_series(35, timeframe=Timeframe.H1, symbol="VALE3"),
+                Timeframe.M5: make_series(35, timeframe=Timeframe.M5, symbol="VALE3"),
+            }
+        },
+    )
+    data = {
+        Timeframe.H1: make_series(35, timeframe=Timeframe.H1),
+        Timeframe.M5: make_series(35, timeframe=Timeframe.M5),
+    }
+    decision = evaluator.evaluate(data, as_of=REFERENCE_INSTANT)
+    assert any("Modo Estudo Profundo" in reason for reason in decision.reasons)
+
+
 def trade(net: str, result_r: str, index: int) -> BacktestTrade:
     value = Decimal(net)
     return BacktestTrade(

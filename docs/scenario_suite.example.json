@@ -1,0 +1,71 @@
+{
+  "scenarios": [
+    {
+      "id": "fixture_smoke_petr4_2026_08",
+      "name": "Smoke test sintético PETR4",
+      "symbol": "PETR4",
+      "start": "2026-07-27",
+      "end": "2026-08-26",
+      "data_root": "data/fixtures",
+      "timeframes": ["1m", "5m", "15m", "60m", "1D"],
+      "market_symbols": ["ITUB4", "VALE3"],
+      "expected_behavior": "Provar que a bateria executa sem usar dado real. Não mede acerto de mercado.",
+      "source_note": "Fixture sintética gerada por scripts/generate_fixtures.py.",
+      "checks": {
+        "allow_no_trades": true,
+        "max_drawdown_pct": 8
+      }
+    },
+    {
+      "id": "b3_circuit_breaker_2020_03",
+      "name": "Crise COVID e circuit breaker B3",
+      "symbol": "PETR4",
+      "start": "2020-03-02",
+      "end": "2020-03-20",
+      "data_root": "data/historical",
+      "timeframes": ["1m", "5m", "15m", "60m", "1D"],
+      "market_symbols": ["VALE3", "ITUB4", "BOVA11"],
+      "expected_behavior": "Prioridade é sobreviver: poucas entradas, stop respeitado e drawdown controlado.",
+      "source_note": "B3 publicou aviso de circuit breaker em 09/03/2020 e descreve interrupções por queda de 10%, 15% e 20% do Ibovespa.",
+      "checks": {
+        "allow_no_trades": true,
+        "max_drawdown_pct": 4,
+        "max_trades": 4
+      }
+    },
+    {
+      "id": "day_trade_risk_window_2012_2017",
+      "name": "Amostra de risco day trade 2012-2017",
+      "symbol": "PETR4",
+      "start": "2012-01-02",
+      "end": "2017-12-28",
+      "data_root": "data/historical",
+      "timeframes": ["5m", "15m", "60m", "1D"],
+      "market_symbols": ["VALE3", "ITUB4", "BOVA11"],
+      "expected_behavior": "Avaliar robustez em janela longa antes de qualquer dinheiro real.",
+      "source_note": "CVM cita estudo FGV com 130 mil pessoas que fizeram day trade regular entre 2012 e 2017.",
+      "checks": {
+        "allow_no_trades": false,
+        "max_drawdown_pct": 12,
+        "min_profit_factor": 1.1
+      }
+    },
+    {
+      "id": "post_circuit_recovery_2020_04",
+      "name": "Recuperação pós-estresse 2020",
+      "symbol": "VALE3",
+      "start": "2020-04-01",
+      "end": "2020-05-29",
+      "data_root": "data/historical",
+      "timeframes": ["1m", "5m", "15m", "60m", "1D"],
+      "market_symbols": ["PETR4", "ITUB4", "BOVA11"],
+      "expected_behavior": "Ver se a máquina volta a aceitar tendência depois do estresse, sem excesso de trades.",
+      "source_note": "Cenário para CSV real exportado do MT5/B3; sem dado local o teste fica SKIP.",
+      "checks": {
+        "allow_no_trades": false,
+        "max_drawdown_pct": 8,
+        "min_profit_factor": 1.05
+      }
+    }
+  ]
+}

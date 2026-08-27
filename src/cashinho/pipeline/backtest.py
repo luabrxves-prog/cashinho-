@@ -31,6 +31,7 @@ from cashinho.pipeline.position_manager import (
     PositionManager,
     PositionRiskState,
 )
+from cashinho.pipeline.study_mode import build_market_study
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -167,9 +168,20 @@ class PipelineDecisionEvaluator:
     risk_profile: RiskProfile
     data_quality_approved: bool = True
     minimum_confidence: int = 60
+    market_series_by_symbol: dict[str, dict[Timeframe, CandleSeries]] | None = None
     _analysis_cache: dict[
         tuple[str, Timeframe, datetime | None, datetime | None, int], TimeframeAnalysis
     ] = field(default_factory=dict, init=False, repr=False)
+
+    def _analysis_for(self, timeframe: Timeframe, series: CandleSeries) -> TimeframeAnalysis:
+        first_at = series.candles[0].open_time if series.candles else None
+        last_at = series.last.close_time if series.last is not None else None
+        cache_key = (series.symbol, timeframe, first_at, last_at, len(series))
+        analysis = self._analysis_cache.get(cache_key)
+        if analysis is None:
+            analysis = analyze_timeframes({timeframe: series}, self.selection)[timeframe]
+            self._analysis_cache[cache_key] = analysis
+        return analysis
 
     def evaluate(
         self,
@@ -184,14 +196,7 @@ class PipelineDecisionEvaluator:
 
         analyses: dict[Timeframe, TimeframeAnalysis] = {}
         for timeframe, series in series_by_timeframe.items():
-            first_at = series.candles[0].open_time if series.candles else None
-            last_at = series.last.close_time if series.last is not None else None
-            cache_key = (series.symbol, timeframe, first_at, last_at, len(series))
-            analysis = self._analysis_cache.get(cache_key)
-            if analysis is None:
-                analysis = analyze_timeframes({timeframe: series}, self.selection)[timeframe]
-                self._analysis_cache[cache_key] = analysis
-            analyses[timeframe] = analysis
+            analyses[timeframe] = self._analysis_for(timeframe, series)
         advice = advise_timeframe(analyses)
         selected = analyses.get(advice.recommended_timeframe) if advice.recommended_timeframe else None
         risk_approved = False
@@ -224,11 +229,36 @@ class PipelineDecisionEvaluator:
             risk_approved=risk_approved,
             timestamp=decision_at,
         )
+        market_approved = True
+        market_reason = None
+        extra_reasons: tuple[str, ...] = ()
+        if self.market_series_by_symbol:
+            market_analyses: dict[str, dict[Timeframe, TimeframeAnalysis]] = {
+                next(iter(series_by_timeframe.values())).symbol: analyses
+            }
+            for symbol, raw_series_by_timeframe in self.market_series_by_symbol.items():
+                prefixes = {
+                    timeframe: truncate_at(series, as_of)
+                    for timeframe, series in raw_series_by_timeframe.items()
+                }
+                prefixes = {timeframe: series for timeframe, series in prefixes.items() if len(series)}
+                if prefixes:
+                    market_analyses[symbol] = {
+                        timeframe: self._analysis_for(timeframe, series)
+                        for timeframe, series in prefixes.items()
+                    }
+            study = build_market_study(market_analyses, side=advice.side)
+            market_approved = study.approved
+            market_reason = study.reason
+            extra_reasons = (f"Modo Estudo Profundo: {study.summary}",)
         return make_final_decision(
             opportunity,
             data_quality_approved=self.data_quality_approved,
             risk_approved=risk_approved,
             candles_closed=True,
+            market_approved=market_approved,
+            market_reason=market_reason,
+            extra_reasons=extra_reasons,
             minimum_confidence=self.minimum_confidence,
             minimum_risk_reward=self.risk_profile.min_risk_reward,
         )
