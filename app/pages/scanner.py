@@ -27,7 +27,12 @@ page_header("Ranking de oportunidades", "Contexto, timeframe e priorização em 
 clock = SystemClock()
 choice = build_market_data_provider(settings, clock, fixtures_root=settings.data_dir / "fixtures")
 provider = choice.provider
-operational_policy = load_operational_policy(settings.operational_policy_path)
+operational_policy_path = (
+    settings.operational_policy_path
+    if settings.operational_policy_path.is_file()
+    else settings.default_operational_policy_path
+)
+operational_policy = load_operational_policy(operational_policy_path)
 selection = IndicatorSelection(
     ema_periods=(9, 21), vwap=True, rsi_period=14, macd=True, atr_period=14
 )

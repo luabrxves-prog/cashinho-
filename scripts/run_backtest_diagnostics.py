@@ -50,6 +50,41 @@ from cashinho.pipeline.operational_policy import (  # noqa: E402
 
 DEFAULT_SYMBOLS = ("PETR4", "VALE3", "ITUB4", "BOVA11")
 DEFAULT_TIMEFRAMES = (Timeframe.M15, Timeframe.H1, Timeframe.D1)
+FULL_HISTORY_START = datetime(1900, 1, 1, tzinfo=UTC)
+FULL_HISTORY_END = datetime(2100, 1, 1, tzinfo=UTC)
+
+
+class CachedCsvHistoricalProvider(CsvHistoricalProvider):
+    """Carrega cada CSV uma vez e fatia os anos em memoria."""
+
+    def __init__(self, root: Path, clock: FrozenClock, *, name: str = "csv") -> None:
+        super().__init__(root, clock, name=name)
+        self._full_cache: dict[tuple[str, Timeframe], CandleSeries] = {}
+
+    def get_candles(
+        self,
+        symbol: str,
+        timeframe: Timeframe,
+        *,
+        start: datetime,
+        end: datetime,
+    ) -> CandleSeries:
+        key = (symbol.upper(), timeframe)
+        series = self._full_cache.get(key)
+        if series is None:
+            series = super().get_candles(
+                symbol,
+                timeframe,
+                start=FULL_HISTORY_START,
+                end=FULL_HISTORY_END,
+            )
+            self._full_cache[key] = series
+        candles = tuple(
+            candle
+            for candle in series.candles
+            if start <= candle.open_time < end
+        )
+        return series.model_copy(update={"candles": candles})
 
 
 def _parse_symbols(raw: str) -> tuple[str, ...]:
@@ -279,6 +314,12 @@ def main() -> int:
         type=Path,
         default=ROOT / "data" / "reports" / "deep_study" / "operational_policy.json",
     )
+    parser.add_argument(
+        "--snapshot-policy-path",
+        type=Path,
+        default=None,
+        help="Opcional: salva uma copia versionavel da politica operacional.",
+    )
     args = parser.parse_args()
 
     symbols = _parse_symbols(args.symbols)
@@ -287,7 +328,7 @@ def main() -> int:
     decision_timeframe = Timeframe(args.decision_timeframe) if args.decision_timeframe else None
     profile = RiskProfile()
     clock = FrozenClock(datetime(max(years) + 1, 1, 2, tzinfo=UTC))
-    provider = CsvHistoricalProvider(args.data_root, clock, name="diagnostics")
+    provider = CachedCsvHistoricalProvider(args.data_root, clock, name="diagnostics")
     all_diagnostics: list[DiagnosticTrade] = []
     notes: list[str] = []
 
@@ -295,6 +336,7 @@ def main() -> int:
         start = datetime.combine(datetime(year, 1, 1).date(), time.min, tzinfo=UTC)
         end = datetime.combine(datetime(year, 12, 31).date(), time.min, tzinfo=UTC) + timedelta(days=1)
         year_clock = FrozenClock(end + timedelta(days=1))
+        print(f"Estudando {year}: carregando dados de {', '.join(symbols)}...", flush=True)
         universe, universe_notes = _load_universe(
             provider,
             symbols=symbols,
@@ -305,6 +347,7 @@ def main() -> int:
         )
         notes.extend(f"{year} {note}" for note in universe_notes)
         for symbol in symbols:
+            print(f"Estudando {year} {symbol}...", flush=True)
             target = universe.get(symbol, {})
             if len(target) < 2:
                 notes.append(f"{year} {symbol}: menos de dois timeframes validos")
@@ -356,7 +399,7 @@ def main() -> int:
     policy = build_policy_from_diagnostics(
         diagnostics,
         initial_capital=profile.capital,
-        generated_at=clock.now(),
+        generated_at=datetime.now(UTC),
         source=(
             f"symbols={','.join(symbols)} years={','.join(str(year) for year in years)} "
             f"timeframes={','.join(timeframe.value for timeframe in timeframes)} "
@@ -366,6 +409,8 @@ def main() -> int:
         ),
     )
     save_operational_policy(policy, args.policy_path)
+    if args.snapshot_policy_path is not None:
+        save_operational_policy(policy, args.snapshot_policy_path)
     markdown = render_markdown(
         diagnostics=diagnostics,
         tables=tables,

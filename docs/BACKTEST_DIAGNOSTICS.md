@@ -52,5 +52,9 @@ O arquivo `operational_policy.json` e consumido pelo Scanner B3 como trava
 historica automatica. Ele bloqueia ou alerta contextos que foram ruins no
 estudo por ativo, horario, lado, timeframe, regime e volatilidade.
 
+O snapshot versionado do estudo 2020-2026 fica em
+[`DEEP_STUDY_2020_2026.md`](DEEP_STUDY_2020_2026.md), e a politica padrao
+gerada fica em `src/cashinho/config/operational_policy.default.json`.
+
 O relatorio nao autoriza dinheiro real. Ele serve para decidir quais filtros
 precisam ser criados ou endurecidos antes de voltar ao PAPER.

@@ -33,6 +33,8 @@ A bateria ampliada de 2020 a 2026 fica em
 contexto de noticias em [`docs/news_catalysts_2020_2026.json`](docs/news_catalysts_2020_2026.json).
 O diagnostico por ativo, ano, mes, horario, regime e motivo de saida fica em
 [`docs/BACKTEST_DIAGNOSTICS.md`](docs/BACKTEST_DIAGNOSTICS.md).
+O estudo operacional 2020-2026 usado como base do Scanner B3 fica em
+[`docs/DEEP_STUDY_2020_2026.md`](docs/DEEP_STUDY_2020_2026.md).
 
 ## Requisitos
 

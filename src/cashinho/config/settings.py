@@ -97,6 +97,10 @@ class Settings(BaseSettings):
         return self.data_dir / "reports" / "deep_study" / "operational_policy.json"
 
     @property
+    def default_operational_policy_path(self) -> Path:
+        return PROJECT_ROOT / "src" / "cashinho" / "config" / "operational_policy.default.json"
+
+    @property
     def mode_is_implemented(self) -> bool:
         return self.mode in IMPLEMENTED_MODES
 
