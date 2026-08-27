@@ -36,6 +36,9 @@ def make_final_decision(
     data_quality_approved: bool,
     risk_approved: bool,
     candles_closed: bool,
+    market_approved: bool = True,
+    market_reason: str | None = None,
+    extra_reasons: tuple[str, ...] = (),
     minimum_confidence: int = 60,
     minimum_risk_reward: Decimal = Decimal("1.5"),
 ) -> FinalDecision:
@@ -43,6 +46,8 @@ def make_final_decision(
     failures: list[str] = []
     if not data_quality_approved:
         failures.append("A qualidade dos dados não permite uma decisão segura.")
+    if not market_approved:
+        failures.append(market_reason or "O mercado amplo não aprovou a direção do ativo.")
     if not candles_closed:
         failures.append("A decisão aguarda o fechamento do candle.")
     if opportunity.side not in {"BUY", "SELL"}:
@@ -76,7 +81,7 @@ def make_final_decision(
 
     failures = list(dict.fromkeys(failures))
     approved = not failures
-    reasons = (*opportunity.reasons, *failures)
+    reasons = (*extra_reasons, *opportunity.reasons, *failures)
     primary = "Todos os requisitos obrigatórios foram confirmados." if approved else failures[0]
     return FinalDecision(
         approved,

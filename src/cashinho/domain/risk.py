@@ -26,27 +26,27 @@ class RiskProfile(DomainModel):
     capital: Money = Decimal("100.00")
 
     risk_per_trade_pct: Decimal = Field(
-        default=Decimal("0.5"), gt=0, le=100, description="Risco maximo por operacao (%)"
+        default=Decimal("2.0"), gt=0, le=100, description="Risco maximo por operacao (%)"
     )
     max_daily_loss_pct: Decimal = Field(
-        default=Decimal("2.0"), gt=0, le=100, description="Perda diaria maxima (%)"
+        default=Decimal("4.0"), gt=0, le=100, description="Perda diaria maxima (%)"
     )
     max_drawdown_pct: Decimal = Field(
         default=Decimal("10.0"), gt=0, le=100, description="Drawdown maximo tolerado (%)"
     )
     max_exposure_pct: Decimal = Field(
-        default=Decimal("50.0"), gt=0, le=100, description="Exposicao maxima total (%)"
+        default=Decimal("100.0"), gt=0, le=100, description="Exposicao maxima total (%)"
     )
     max_exposure_per_symbol_pct: Decimal = Field(
-        default=Decimal("20.0"), gt=0, le=100, description="Exposicao maxima por ativo (%)"
+        default=Decimal("60.0"), gt=0, le=100, description="Exposicao maxima por ativo (%)"
     )
 
-    max_trades_per_day: int = Field(default=5, ge=0)
-    max_consecutive_losses: int = Field(default=3, ge=0)
-    max_open_positions: int = Field(default=3, ge=0)
+    max_trades_per_day: int = Field(default=2, ge=0)
+    max_consecutive_losses: int = Field(default=2, ge=0)
+    max_open_positions: int = Field(default=1, ge=0)
 
     min_risk_reward: Decimal = Field(
-        default=Decimal("1.5"), gt=0, description="Relacao risco/retorno minima aceita"
+        default=Decimal("2.0"), gt=0, description="Relacao risco/retorno minima aceita"
     )
 
     kill_switch_active: bool = False

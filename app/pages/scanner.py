@@ -18,6 +18,7 @@ from cashinho.pipeline.market_data import load_market_data
 from cashinho.pipeline.multi_timeframe import advise_timeframe, analyze_timeframes
 from cashinho.pipeline.opportunities import build_opportunity
 from cashinho.pipeline.paper_ticket import calculate_ticket_sizing
+from cashinho.pipeline.study_mode import build_market_study
 
 settings = get_settings()
 sidebar(settings)
@@ -47,8 +48,9 @@ if st.button(
 ):
     end = clock.now()
     start = end - timedelta(days=int(lookback))
-    decisions = []
+    prepared = []
     study_meta = {}
+    analyses_by_symbol = {}
     for symbol in choice.offered_symbols():
         analyses_series = {}
         statuses = []
@@ -75,22 +77,28 @@ if st.button(
         if not analyses_series:
             continue
         analyses = analyze_timeframes(analyses_series, selection)
+        analyses_by_symbol[symbol] = analyses
         advice = advise_timeframe(analyses)
         risk_approved = False
+        risk_note = "Sem entrada e stop calculados para dimensionar a posição."
         selected = (
             analyses.get(advice.recommended_timeframe) if advice.recommended_timeframe else None
         )
         strongest = max(analyses.values(), key=lambda item: item.signal.score)
         if selected and selected.signal.entry is not None and selected.signal.stop is not None:
             try:
-                calculate_ticket_sizing(
+                sizing = calculate_ticket_sizing(
                     entry=selected.signal.entry,
                     stop=selected.signal.stop,
                     profile=settings.risk_profile(),
                 )
                 risk_approved = True
-            except ValueError:
-                pass
+                risk_note = (
+                    f"Com R$ {settings.risk_profile().capital:,.2f}, cabem até "
+                    f"{sizing.quantity} ação(ões); risco estimado R$ {sizing.estimated_risk:,.2f}."
+                )
+            except ValueError as exc:
+                risk_note = f"Bloqueado pelo tamanho da conta: {exc}"
         data_status = (
             max(statuses, key=lambda item: list(type(item)).index(item))
             if statuses
@@ -106,21 +114,52 @@ if st.button(
             if selected_series is not None and selected_series.last is not None
             else max(timestamps)
         )
+        prepared.append(
+            {
+                "symbol": symbol,
+                "analyses": analyses,
+                "advice": advice,
+                "data_status": data_status,
+                "risk_approved": risk_approved,
+                "risk_note": risk_note,
+                "decision_timestamp": decision_timestamp,
+                "selected": selected,
+                "strongest": strongest,
+                "ignored": ignored,
+            }
+        )
+
+    decisions = []
+    for item in prepared:
+        symbol = item["symbol"]
+        analyses = item["analyses"]
+        advice = item["advice"]
+        data_status = item["data_status"]
+        risk_approved = bool(item["risk_approved"])
+        market_study = build_market_study(analyses_by_symbol, side=advice.side)
         opportunity = build_opportunity(
             symbol=symbol,
             advice=advice,
             analyses=analyses,
             data_status=data_status,
             risk_approved=risk_approved,
-            timestamp=decision_timestamp,
+            timestamp=item["decision_timestamp"],
         )
         decision = make_final_decision(
             opportunity,
             data_quality_approved=data_status is not DataStatus.BLOCKED,
             risk_approved=risk_approved,
             candles_closed=True,
+            market_approved=market_study.approved,
+            market_reason=market_study.reason,
+            extra_reasons=(
+                f"Modo Estudo Profundo: {market_study.summary}",
+                f"Conta de estudo: {item['risk_note']}",
+            ),
             minimum_risk_reward=settings.risk_profile().min_risk_reward,
         )
+        selected = item["selected"]
+        strongest = item["strongest"]
         study_status = (
             selected.signal.status
             if selected is not None
@@ -140,6 +179,9 @@ if st.button(
             "timeframe": (
                 selected.timeframe.value if selected is not None else strongest.timeframe.value
             ),
+            "market": market_study.summary,
+            "market_reason": market_study.reason,
+            "risk": item["risk_note"],
         }
         journal_audit_service().record_decision(decision, mode=Mode.RESEARCH)
         decisions.append(decision)
@@ -176,6 +218,8 @@ if ranking:
             "Confiança": study_meta.get(item.symbol, {}).get("score", item.confidence),
             "R:R": item.risk_reward if item.risk_reward is not None else "—",
             "Observação": item.primary_reason,
+            "Mercado amplo": study_meta.get(item.symbol, {}).get("market_reason", "—"),
+            "Conta R$100": study_meta.get(item.symbol, {}).get("risk", "—"),
         }
         for item in ranking
     ]
@@ -199,6 +243,10 @@ if ranking:
             f"**{meta.get('timeframe')}**, lado **{side_label}**, "
             f"confiança **{meta.get('score')}/100**. Isso ainda não é entrada liberada.",
             icon="🔎",
+        )
+        st.warning(
+            f"Modo Estudo Profundo: {meta.get('market_reason')} {meta.get('risk')}",
+            icon="❔",
         )
     st.caption(study_meta.get(selected.symbol, {}).get("note", ""))
     with st.expander("Por que essa decisão?"):

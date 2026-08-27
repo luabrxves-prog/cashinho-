@@ -54,6 +54,7 @@ from cashinho.pipeline.position_manager import (
     apply_position_decision,
 )
 from cashinho.pipeline.position_monitoring import evaluate_open_position
+from cashinho.pipeline.study_mode import build_market_study
 
 INSPECTION_MODE = Mode.RESEARCH
 
@@ -686,6 +687,36 @@ for context_timeframe in available:
         )
 
 timeframe_analyses = analyze_timeframes(series_by_timeframe, selection)
+market_analyses_by_symbol = {symbol: timeframe_analyses}
+for market_symbol in symbols:
+    if market_symbol == symbol:
+        continue
+    market_series_by_timeframe = {}
+    try:
+        market_timeframes = provider.get_available_timeframes(market_symbol)
+    except CashinhoError:
+        continue
+    for market_timeframe in market_timeframes:
+        try:
+            market_result = cached_market_data(
+                provider,
+                clock,
+                symbol_value=market_symbol,
+                timeframe_value=market_timeframe.value,
+                start_value=start,
+                end_value=end,
+            )
+        except (ProviderError, CashinhoError):
+            continue
+        if market_result.usable_series is not None:
+            market_series_by_timeframe[market_timeframe] = (
+                market_result.usable_series.closed_only()
+            )
+    if market_series_by_timeframe:
+        market_analyses_by_symbol[market_symbol] = analyze_timeframes(
+            market_series_by_timeframe,
+            selection,
+        )
 timeframe_advice = advise_timeframe(timeframe_analyses)
 selected_analysis = (
     timeframe_analyses.get(timeframe_advice.recommended_timeframe)
@@ -696,12 +727,23 @@ if selected_analysis is not None:
     signal = selected_analysis.signal
 
 risk_approved = False
+risk_note = "Sem entrada e stop calculados para dimensionar a posição."
 if signal.entry is not None and signal.stop is not None and not profile_base.kill_switch_active:
     try:
-        calculate_ticket_sizing(entry=signal.entry, stop=signal.stop, profile=profile_base)
+        signal_sizing = calculate_ticket_sizing(
+            entry=signal.entry,
+            stop=signal.stop,
+            profile=profile_base,
+            lot_size=1,
+        )
         risk_approved = True
-    except ValueError:
-        pass
+        risk_note = (
+            f"Com R$ {profile_base.capital:,.2f}, cabem até "
+            f"{signal_sizing.quantity} ação(ões); risco estimado "
+            f"R$ {signal_sizing.estimated_risk:,.2f}."
+        )
+    except ValueError as exc:
+        risk_note = f"Bloqueado pelo tamanho da conta: {exc}"
 
 data_status = (
     DataStatus.BLOCKED
@@ -732,11 +774,21 @@ opportunity = build_opportunity(
     risk_approved=risk_approved,
     timestamp=decision_timestamp,
 )
+market_study = build_market_study(
+    market_analyses_by_symbol,
+    side=timeframe_advice.side,
+)
 decision = make_final_decision(
     opportunity,
     data_quality_approved=data_status is not DataStatus.BLOCKED,
     risk_approved=risk_approved,
     candles_closed=not closed_series.has_open_candle,
+    market_approved=market_study.approved,
+    market_reason=market_study.reason,
+    extra_reasons=(
+        f"Modo Estudo Profundo: {market_study.summary}",
+        f"Conta de estudo: {risk_note}",
+    ),
     minimum_risk_reward=profile_base.min_risk_reward,
 )
 journal_audit.record_decision(decision, mode=INSPECTION_MODE)
@@ -833,6 +885,43 @@ if st.session_state.get("paper_ticket_context") != ticket_context:
 if open_position is not None and position_decision is not None:
     render_position_card(open_position, position_decision)
 else:
+    with st.expander("Modo Estudo Profundo", expanded=True):
+        st.caption(
+            "Antes do gatilho, o Cashinho confere mercado amplo, ativo, timeframe, "
+            "preço de entrada e risco em reais. Isso evita liberar operação só porque "
+            "um candle de 5m parece bonito."
+        )
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric(
+            "Ativos avaliados",
+            market_study.symbols_evaluated,
+            help="Quantidade de ativos do provider que entraram na leitura do mercado amplo.",
+        )
+        m2.metric(
+            "Viés do mercado",
+            market_study.bias_label,
+            help="Direção predominante dos ativos avaliados: compra, venda ou neutro.",
+        )
+        m3.metric(
+            "Alinhamento",
+            f"{market_study.confidence}/100",
+            help="Percentual dos ativos direcionais que apoiam o mesmo lado do ativo estudado.",
+        )
+        m4.metric(
+            "Capital base",
+            f"R$ {profile_base.capital:,.2f}",
+            help="Dinheiro usado para calcular se a operação cabe no tamanho atual da conta.",
+        )
+        if market_study.approved:
+            st.success(market_study.reason, icon="❔")
+        else:
+            st.warning(market_study.reason, icon="❔")
+        st.info(risk_note, icon="❔")
+        if market_study.sample_limited:
+            st.caption(
+                "Amostra pequena: quanto mais ativos reais o MT5 fornecer, melhor fica "
+                "a leitura do mercado inteiro."
+            )
     if not decision.should_enter and timeframe_analyses:
         strongest_analysis = max(
             timeframe_analyses.values(),

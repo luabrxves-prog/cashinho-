@@ -14,6 +14,11 @@ page_header(
     "Risk Manager",
     "O Risk Manager tem autoridade superior a estrategia. Uma rejeicao de risco nao pode ser sobrescrita.",
 )
+st.info(
+    "Conta inicial configurada para **R$ 100,00**. O Cashinho dimensiona a boleta pelo "
+    "dinheiro disponível agora: se o stop de 1 ação passar do limite, a entrada fica bloqueada.",
+    icon="❔",
+)
 
 if profile.kill_switch_active:
     st.error("KILL SWITCH ATIVO — nenhuma nova operacao sera aprovada.", icon="⛔")
@@ -33,7 +38,10 @@ col1.metric(
 col1.metric(
     "Risco por operacao",
     f"{profile.risk_per_trade_pct}%",
-    help="Percentual máximo do capital que uma única operação pode perder no stop.",
+    help=(
+        "Percentual máximo do capital que uma única operação pode perder no stop. "
+        "Com R$100 e 2%, o limite é R$2 por tentativa."
+    ),
 )
 col1.metric(
     "Risco monetario por operacao",

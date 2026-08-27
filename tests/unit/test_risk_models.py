@@ -34,6 +34,15 @@ def test_kill_switch_desligado_por_padrao() -> None:
     assert RiskProfile().kill_switch_active is False
 
 
+def test_perfil_padrao_usa_conta_pequena_de_estudo() -> None:
+    profile = RiskProfile()
+    assert profile.capital == Decimal("100.00")
+    assert profile.risk_per_trade_pct == Decimal("2.0")
+    assert profile.max_exposure_per_symbol_pct == Decimal("60.0")
+    assert profile.max_open_positions == 1
+    assert profile.min_risk_reward == Decimal("2.0")
+
+
 def test_quantidade_negativa_e_rejeitada() -> None:
     with pytest.raises(ValidationError):
         PositionSize(

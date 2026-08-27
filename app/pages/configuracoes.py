@@ -52,6 +52,31 @@ st.table(
     }
 )
 
+st.info(
+    "A configuração padrão começa em **R$ 100,00**. Isso não força entrada: apenas faz "
+    "o tamanho da posição, o stop e o bloqueio de risco conversarem com o caixa atual.",
+    icon="❔",
+)
+
+st.table(
+    {
+        "Base de estudo": [
+            "Mercado primeiro",
+            "Ativo depois",
+            "Timeframe depois",
+            "Gatilho por último",
+            "Risco sempre em reais",
+        ],
+        "Como o Cashinho usa": [
+            "Confere se a maioria dos ativos avaliados apoia compra, venda ou neutralidade.",
+            "Verifica se o papel escolhido está em harmonia com o mercado.",
+            "Exige alinhamento entre tempos maiores e operacionais.",
+            "Só considera entrada depois de candle fechado e sinal confirmado.",
+            "Calcula quantidade pelo capital disponível, stop e exposição máxima.",
+        ],
+    }
+)
+
 st.caption(f"Modos habilitados: {', '.join(sorted(m.value for m in IMPLEMENTED_MODES))}")
 st.caption("Nenhuma credencial e exibida nesta tela por principio.")
 

@@ -16,6 +16,12 @@ oportunidade são:
 
 `NÃO OPERAR` é uma decisão perfeitamente válida.
 
+Antes de qualquer evolução para dinheiro real, a base de estudo fica registrada
+em [`docs/STRATEGY_RESEARCH_BASE.md`](docs/STRATEGY_RESEARCH_BASE.md). Ela
+documenta os princípios usados no Modo Estudo Profundo: mercado antes do ativo,
+ativo antes do timeframe, timeframe antes do gatilho e risco em reais antes da
+boleta.
+
 ## Requisitos
 
 - Python 3.11 ou superior
