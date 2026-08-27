@@ -62,6 +62,17 @@ O arquivo versionado em `docs/scenario_suite.example.json` traz:
 - janela longa de 2012 a 2017 citada pela CVM/FGV em estudos de day trade;
 - recuperacao pos-estresse em abril/maio de 2020.
 
+Para a bateria 2020-2026 com dados reais exportados do MT5:
+
+```powershell
+python scripts/run_scenario_suite.py --config docs/scenario_suite_2020_2026.json --output data/reports/scenario_suite_2020_2026.md
+```
+
+Os fatos/noticias que orientam os cenarios ficam em
+`docs/news_catalysts_2020_2026.json`. Eles nao sao usados como previsao; sao
+usados como contexto para revisar se a estrategia se comporta bem em estresse,
+eleicao, evento corporativo e regime anual.
+
 Para esses cenarios virarem prova real, exporte os candles historicos do MT5 ou
 de outra fonte confiavel para `data/historical/`.
 

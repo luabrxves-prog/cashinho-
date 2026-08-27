@@ -39,9 +39,11 @@ from cashinho.domain.market import CandleSeries  # noqa: E402
 from cashinho.domain.risk import RiskProfile  # noqa: E402
 from cashinho.pipeline.backtest import (  # noqa: E402
     BacktestComparison,
+    BacktestExitMode,
     ExecutionCostModel,
     PipelineDecisionEvaluator,
     compare_exit_modes,
+    run_backtest,
 )
 from cashinho.pipeline.indicators import IndicatorSelection  # noqa: E402
 from cashinho.pipeline.market_data import load_market_data  # noqa: E402
@@ -229,12 +231,22 @@ def run_scenario(scenario: Scenario) -> ScenarioReport:
         profile,
         market_series_by_symbol=market_context,
     )
-    comparison = compare_exit_modes(
-        target,
-        evaluator,
-        risk_profile=profile,
-        costs=ExecutionCostModel(),
-    )
+    if scenario.checks.get("fixed_only", False):
+        fixed = run_backtest(
+            target,
+            evaluator,
+            risk_profile=profile,
+            costs=ExecutionCostModel(),
+            exit_mode=BacktestExitMode.FIXED,
+        )
+        comparison = BacktestComparison(fixed=fixed, dynamic=fixed)
+    else:
+        comparison = compare_exit_modes(
+            target,
+            evaluator,
+            risk_profile=profile,
+            costs=ExecutionCostModel(),
+        )
     failures = _evaluate_checks(comparison, scenario.checks)
     status = "FAIL" if failures else "PASS"
     return ScenarioReport(scenario, status, (*notes, *failures), comparison)

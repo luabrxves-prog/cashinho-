@@ -169,11 +169,14 @@ class PipelineDecisionEvaluator:
     data_quality_approved: bool = True
     minimum_confidence: int = 60
     market_series_by_symbol: dict[str, dict[Timeframe, CandleSeries]] | None = None
+    max_history_bars: int = 260
     _analysis_cache: dict[
         tuple[str, Timeframe, datetime | None, datetime | None, int], TimeframeAnalysis
     ] = field(default_factory=dict, init=False, repr=False)
 
     def _analysis_for(self, timeframe: Timeframe, series: CandleSeries) -> TimeframeAnalysis:
+        if self.max_history_bars > 0 and len(series.candles) > self.max_history_bars:
+            series = series.model_copy(update={"candles": series.candles[-self.max_history_bars:]})
         first_at = series.candles[0].open_time if series.candles else None
         last_at = series.last.close_time if series.last is not None else None
         cache_key = (series.symbol, timeframe, first_at, last_at, len(series))
@@ -276,7 +279,13 @@ class PipelineDecisionEvaluator:
             series.require_closed()
             if series.last is not None and series.last.close_time > as_of:
                 raise LookaheadError("Contexto de posição recebeu candle posterior ao relógio.")
-        analyses = analyze_timeframes(series_by_timeframe, self.selection)
+        trimmed = {
+            timeframe: series.model_copy(update={"candles": series.candles[-self.max_history_bars:]})
+            if self.max_history_bars > 0 and len(series.candles) > self.max_history_bars
+            else series
+            for timeframe, series in series_by_timeframe.items()
+        }
+        analyses = analyze_timeframes(trimmed, self.selection)
         advice = advise_timeframe(analyses)
         operational = (
             preferred_timeframe
@@ -286,7 +295,7 @@ class PipelineDecisionEvaluator:
             else min(analyses, key=lambda timeframe: timeframe.duration)
         )
         return HistoricalPositionContext(
-            recent_candles=series_by_timeframe[operational],
+            recent_candles=trimmed[operational],
             technical_signal=analyses[operational].signal,
             timeframe_advice=advice,
         )

@@ -28,6 +28,9 @@ Ela roda uma bateria de cenários via `scripts/run_scenario_suite.py` e marca
 como `SKIP` qualquer janela que ainda não tenha CSV real local.
 Com o MT5 aberto, `scripts/export_mt5_history.py` exporta candles reais para
 `data/historical/` antes da bateria.
+A bateria ampliada de 2020 a 2026 fica em
+[`docs/scenario_suite_2020_2026.json`](docs/scenario_suite_2020_2026.json), com
+contexto de noticias em [`docs/news_catalysts_2020_2026.json`](docs/news_catalysts_2020_2026.json).
 
 ## Requisitos
 

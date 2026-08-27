@@ -226,6 +226,22 @@ def test_avaliador_historico_inclui_estudo_do_mercado_amplo() -> None:
     assert any("Modo Estudo Profundo" in reason for reason in decision.reasons)
 
 
+def test_contexto_historico_usa_janela_recente_sem_lookahead() -> None:
+    evaluator = PipelineDecisionEvaluator(IndicatorSelection(), PROFILE, max_history_bars=5)
+    data = {
+        Timeframe.H1: make_series(35, timeframe=Timeframe.H1),
+        Timeframe.M5: make_series(35, timeframe=Timeframe.M5),
+    }
+    context = evaluator.position_context(
+        data,
+        as_of=REFERENCE_INSTANT,
+        preferred_timeframe=Timeframe.M5,
+    )
+    assert len(context.recent_candles) == 5
+    assert context.recent_candles.last is not None
+    assert context.recent_candles.last.close_time <= REFERENCE_INSTANT
+
+
 def trade(net: str, result_r: str, index: int) -> BacktestTrade:
     value = Decimal(net)
     return BacktestTrade(

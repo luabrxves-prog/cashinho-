@@ -1,0 +1,74 @@
+{
+  "events": [
+    {
+      "id": "covid_circuit_breaker_2020_03",
+      "date": "2020-03-09",
+      "end": "2020-03-20",
+      "label": "COVID/circuit breaker B3",
+      "market_impact": "stress",
+      "source": "B3",
+      "url": "https://www.b3.com.br/pt_br/noticias/aviso-ao-mercado-8AE490C870BF0D5D0170BF7FBAE91DA7.htm",
+      "study_rule": "Priorizar sobrevivencia: aceitar ficar sem operar, limitar quantidade de trades e drawdown."
+    },
+    {
+      "id": "election_volatility_2022_10",
+      "date": "2022-10-03",
+      "end": "2022-10-31",
+      "label": "Volatilidade de eleicoes 2022",
+      "market_impact": "volatility",
+      "source": "B3 Bora Investir",
+      "url": "https://borainvestir.b3.com.br/tipos-de-investimentos/renda-variavel/acoes/como-as-eleicoes-influenciam-no-sobe-e-desce-da-bolsa/",
+      "study_rule": "Exigir mais confirmacao de mercado amplo; nao comprar/vender por direcao emocional de noticia."
+    },
+    {
+      "id": "petrobras_dividend_2022_11",
+      "date": "2022-11-03",
+      "end": "2022-11-22",
+      "label": "Petrobras dividendos e data ex",
+      "market_impact": "single_name_catalyst",
+      "source": "Agencia Petrobras",
+      "url": "https://agencia.petrobras.com.br/pt/w/petrobras-informa-sobre-a-forma-de-distribuicao-da-remuneracao-aos-acionistas",
+      "study_rule": "Em evento corporativo do ativo, estudar gap, data ex e volume antes de aceitar sinal tecnico."
+    },
+    {
+      "id": "americanas_accounting_2023_01",
+      "date": "2023-01-11",
+      "end": "2023-02-03",
+      "label": "Americanas inconsistencias contabeis",
+      "market_impact": "credit_contagion",
+      "source": "CVM / RI Americanas",
+      "url": "https://www.gov.br/cvm/pt-br/assuntos/noticias/2023/atualizacao-de-informacoes-relativas-a-fatos-no-ambito-da-companhia-aberta-americanas-s-a-2013-em-recuperacao-judicial",
+      "study_rule": "Risco de contagio em bancos/varejo: reduzir confianca se o mercado amplo nao confirmar."
+    },
+    {
+      "id": "recent_regime_2024",
+      "date": "2024-01-02",
+      "end": "2024-12-30",
+      "label": "Ano completo 2024",
+      "market_impact": "annual_regime",
+      "source": "Candles MT5 exportados localmente",
+      "url": "",
+      "study_rule": "Medir robustez anual fora dos choques mais obvios."
+    },
+    {
+      "id": "recent_regime_2025",
+      "date": "2025-01-02",
+      "end": "2025-12-30",
+      "label": "Ano completo 2025",
+      "market_impact": "annual_regime",
+      "source": "Candles MT5 exportados localmente",
+      "url": "",
+      "study_rule": "Medir robustez anual fora dos choques mais obvios."
+    },
+    {
+      "id": "recent_regime_2026",
+      "date": "2026-01-02",
+      "end": "2026-08-27",
+      "label": "Ano parcial 2026",
+      "market_impact": "annual_regime",
+      "source": "Candles MT5 exportados localmente",
+      "url": "",
+      "study_rule": "Medir comportamento recente com dados do terminal."
+    }
+  ]
+}
