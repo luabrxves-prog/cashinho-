@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from math import ceil
 from typing import Protocol
 
 from cashinho.domain.enums import DataStatus, Timeframe
@@ -35,6 +37,10 @@ from cashinho.pipeline.study_mode import build_market_study
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
+_CLOSE_TIME_CACHE: dict[
+    tuple[str, Timeframe, datetime | None, datetime | None, int],
+    tuple[datetime, ...],
+] = {}
 
 
 class BacktestExitMode(StrEnum):
@@ -241,7 +247,11 @@ class PipelineDecisionEvaluator:
             }
             for symbol, raw_series_by_timeframe in self.market_series_by_symbol.items():
                 prefixes = {
-                    timeframe: truncate_at(series, as_of)
+                    timeframe: truncate_at(
+                        series,
+                        as_of,
+                        max_bars=self.max_history_bars,
+                    )
                     for timeframe, series in raw_series_by_timeframe.items()
                 }
                 prefixes = {timeframe: series for timeframe, series in prefixes.items() if len(series)}
@@ -301,14 +311,30 @@ class PipelineDecisionEvaluator:
         )
 
 
-def truncate_at(series: CandleSeries, as_of: datetime) -> CandleSeries:
+def truncate_at(series: CandleSeries, as_of: datetime, *, max_bars: int = 0) -> CandleSeries:
     """Projeta somente candles já fechados no instante lógico."""
-    candles = tuple(
-        candle
-        for candle in series.candles
-        if candle.is_closed and candle.close_time <= as_of
+    return series.model_copy(
+        update={"candles": _truncate_candles(series, as_of, max_bars=max_bars)}
     )
-    return series.model_copy(update={"candles": candles})
+
+
+def _truncate_candles(
+    series: CandleSeries,
+    as_of: datetime,
+    *,
+    max_bars: int,
+) -> tuple[Candle, ...]:
+    closed = series.closed_only().candles
+    first_at = closed[0].open_time if closed else None
+    last_at = closed[-1].close_time if closed else None
+    cache_key = (series.symbol, series.timeframe, first_at, last_at, len(closed))
+    close_times = _CLOSE_TIME_CACHE.get(cache_key)
+    if close_times is None:
+        close_times = tuple(candle.close_time for candle in closed)
+        _CLOSE_TIME_CACHE[cache_key] = close_times
+    index = bisect_right(close_times, as_of)
+    start = max(0, index - max_bars) if max_bars > 0 else 0
+    return closed[start:index]
 
 
 def _decision_key(decision: FinalDecision) -> tuple[str, Timeframe | None, datetime, str]:
@@ -423,6 +449,7 @@ def run_backtest(
     risk_profile: RiskProfile,
     costs: ExecutionCostModel | None = None,
     decision_timeframe: Timeframe | None = None,
+    max_decision_points: int = 0,
     exit_mode: BacktestExitMode = BacktestExitMode.FIXED,
     position_manager: PositionManager | None = None,
     position_context_provider: HistoricalPositionContextProvider | None = None,
@@ -441,7 +468,12 @@ def run_backtest(
     )
     if decision_clock not in closed:
         raise ValueError("Timeframe do relógio de decisão não está disponível.")
-    decision_times = {candle.close_time for candle in closed[decision_clock].candles}
+    raw_decision_times = tuple(candle.close_time for candle in closed[decision_clock].candles)
+    if max_decision_points > 0 and len(raw_decision_times) > max_decision_points:
+        step = ceil(len(raw_decision_times) / max_decision_points)
+        decision_times = set(raw_decision_times[::step])
+    else:
+        decision_times = set(raw_decision_times)
     cost_model = costs or ExecutionCostModel()
     manager = position_manager or PositionManager()
     context_provider = position_context_provider
@@ -502,7 +534,15 @@ def run_backtest(
                     and context_provider is not None
                 ):
                     prefixes = {
-                        timeframe: truncate_at(series, candle.close_time)
+                        timeframe: truncate_at(
+                            series,
+                            candle.close_time,
+                            max_bars=(
+                                evaluator.max_history_bars
+                                if isinstance(evaluator, PipelineDecisionEvaluator)
+                                else 0
+                            ),
+                        )
                         for timeframe, series in closed.items()
                     }
                     assert pending.timeframe is not None
@@ -554,7 +594,15 @@ def run_backtest(
         if candle.close_time not in decision_times:
             continue
         prefixes = {
-            timeframe: truncate_at(series, candle.close_time)
+            timeframe: truncate_at(
+                series,
+                candle.close_time,
+                max_bars=(
+                    evaluator.max_history_bars
+                    if isinstance(evaluator, PipelineDecisionEvaluator)
+                    else 0
+                ),
+            )
             for timeframe, series in closed.items()
         }
         decision = evaluator.evaluate(prefixes, as_of=candle.close_time)

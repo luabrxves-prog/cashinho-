@@ -43,6 +43,10 @@ from cashinho.pipeline.backtest_diagnostics import (  # noqa: E402
 )
 from cashinho.pipeline.indicators import IndicatorSelection  # noqa: E402
 from cashinho.pipeline.market_data import load_market_data  # noqa: E402
+from cashinho.pipeline.operational_policy import (  # noqa: E402
+    build_policy_from_diagnostics,
+    save_operational_policy,
+)
 
 DEFAULT_SYMBOLS = ("PETR4", "VALE3", "ITUB4", "BOVA11")
 DEFAULT_TIMEFRAMES = (Timeframe.M15, Timeframe.H1, Timeframe.D1)
@@ -104,6 +108,31 @@ def _load_series(
         else:
             series_by_timeframe[timeframe] = loaded.usable_series
     return series_by_timeframe, tuple(notes)
+
+
+def _load_universe(
+    provider: CsvHistoricalProvider,
+    *,
+    symbols: tuple[str, ...],
+    timeframes: tuple[Timeframe, ...],
+    start: datetime,
+    end: datetime,
+    clock: FrozenClock,
+) -> tuple[dict[str, dict[Timeframe, CandleSeries]], tuple[str, ...]]:
+    universe: dict[str, dict[Timeframe, CandleSeries]] = {}
+    notes = []
+    for symbol in symbols:
+        loaded, symbol_notes = _load_series(
+            provider,
+            symbol=symbol,
+            timeframes=timeframes,
+            start=start,
+            end=end,
+            clock=clock,
+        )
+        universe[symbol] = loaded
+        notes.extend(symbol_notes)
+    return universe, tuple(notes)
 
 
 def _money(value: Decimal | None) -> str:
@@ -206,18 +235,56 @@ def render_markdown(
     return "\n".join(lines)
 
 
+def render_policy_markdown(policy_path: Path, rules_count: int) -> str:
+    return (
+        "\n".join(
+            [
+                "## Politica operacional gerada",
+                "",
+                f"- Arquivo: `{policy_path}`",
+                f"- Regras historicas: **{rules_count}**",
+                "",
+                "O scanner usa essa politica como trava adicional antes de liberar uma entrada.",
+                "",
+            ]
+        )
+        if rules_count
+        else "\n".join(
+            [
+                "## Politica operacional gerada",
+                "",
+                "Nenhuma regra historica foi gerada com os filtros atuais.",
+                "",
+            ]
+        )
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbols", default=",".join(DEFAULT_SYMBOLS))
     parser.add_argument("--years", default="2020-2026")
     parser.add_argument("--timeframes", default=",".join(tf.value for tf in DEFAULT_TIMEFRAMES))
+    parser.add_argument("--decision-timeframe", default="")
+    parser.add_argument("--max-decision-points", type=int, default=0)
+    parser.add_argument(
+        "--market-context",
+        action="store_true",
+        help="Inclui leitura do mercado amplo dentro de cada candle do backtest.",
+    )
     parser.add_argument("--data-root", type=Path, default=ROOT / "data" / "historical")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data" / "reports" / "diagnostics")
+    parser.add_argument(
+        "--policy-path",
+        type=Path,
+        default=ROOT / "data" / "reports" / "deep_study" / "operational_policy.json",
+    )
     args = parser.parse_args()
 
     symbols = _parse_symbols(args.symbols)
     years = _parse_years(args.years)
     timeframes = _parse_timeframes(args.timeframes)
+    decision_timeframe = Timeframe(args.decision_timeframe) if args.decision_timeframe else None
     profile = RiskProfile()
     clock = FrozenClock(datetime(max(years) + 1, 1, 2, tzinfo=UTC))
     provider = CsvHistoricalProvider(args.data_root, clock, name="diagnostics")
@@ -228,32 +295,29 @@ def main() -> int:
         start = datetime.combine(datetime(year, 1, 1).date(), time.min, tzinfo=UTC)
         end = datetime.combine(datetime(year, 12, 31).date(), time.min, tzinfo=UTC) + timedelta(days=1)
         year_clock = FrozenClock(end + timedelta(days=1))
+        universe, universe_notes = _load_universe(
+            provider,
+            symbols=symbols,
+            timeframes=timeframes,
+            start=start,
+            end=end,
+            clock=year_clock,
+        )
+        notes.extend(f"{year} {note}" for note in universe_notes)
         for symbol in symbols:
-            target, target_notes = _load_series(
-                provider,
-                symbol=symbol,
-                timeframes=timeframes,
-                start=start,
-                end=end,
-                clock=year_clock,
-            )
-            notes.extend(f"{year} {note}" for note in target_notes)
+            target = universe.get(symbol, {})
             if len(target) < 2:
                 notes.append(f"{year} {symbol}: menos de dois timeframes validos")
                 continue
-            market_context = {}
-            for market_symbol in (item for item in symbols if item != symbol):
-                loaded, market_notes = _load_series(
-                    provider,
-                    symbol=market_symbol,
-                    timeframes=timeframes,
-                    start=start,
-                    end=end,
-                    clock=year_clock,
-                )
-                notes.extend(f"{year} {note}" for note in market_notes)
-                if loaded:
-                    market_context[market_symbol] = loaded
+            market_context = (
+                {
+                    market_symbol: loaded
+                    for market_symbol, loaded in universe.items()
+                    if market_symbol != symbol and loaded
+                }
+                if args.market_context
+                else {}
+            )
             evaluator = PipelineDecisionEvaluator(
                 IndicatorSelection(
                     ema_periods=(9, 21),
@@ -270,6 +334,8 @@ def main() -> int:
                 evaluator,
                 risk_profile=profile,
                 costs=ExecutionCostModel(),
+                decision_timeframe=decision_timeframe,
+                max_decision_points=args.max_decision_points,
                 exit_mode=BacktestExitMode.FIXED,
             )
             all_diagnostics.extend(
@@ -287,12 +353,26 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(args.output_dir / "diagnostic_trades.csv", trade_rows)
     _write_csv(args.output_dir / "diagnostic_groups.csv", group_rows)
+    policy = build_policy_from_diagnostics(
+        diagnostics,
+        initial_capital=profile.capital,
+        generated_at=clock.now(),
+        source=(
+            f"symbols={','.join(symbols)} years={','.join(str(year) for year in years)} "
+            f"timeframes={','.join(timeframe.value for timeframe in timeframes)} "
+            f"decision_timeframe={decision_timeframe.value if decision_timeframe else 'auto'} "
+            f"max_decision_points={args.max_decision_points} "
+            f"market_context={bool(args.market_context)}"
+        ),
+    )
+    save_operational_policy(policy, args.policy_path)
     markdown = render_markdown(
         diagnostics=diagnostics,
         tables=tables,
         notes=tuple(dict.fromkeys(notes)),
         output_dir=args.output_dir,
     )
+    markdown = f"{markdown}\n\n{render_policy_markdown(args.policy_path, len(policy.rules))}"
     report_path = args.output_dir / "diagnostic_report.md"
     report_path.write_text(markdown, encoding="utf-8")
     print(markdown)

@@ -38,6 +38,8 @@ def make_final_decision(
     candles_closed: bool,
     market_approved: bool = True,
     market_reason: str | None = None,
+    operational_policy_approved: bool = True,
+    operational_policy_reason: str | None = None,
     extra_reasons: tuple[str, ...] = (),
     minimum_confidence: int = 60,
     minimum_risk_reward: Decimal = Decimal("1.5"),
@@ -48,6 +50,11 @@ def make_final_decision(
         failures.append("A qualidade dos dados não permite uma decisão segura.")
     if not market_approved:
         failures.append(market_reason or "O mercado amplo não aprovou a direção do ativo.")
+    if not operational_policy_approved:
+        failures.append(
+            operational_policy_reason
+            or "A base de estudo histórico bloqueou este contexto operacional."
+        )
     if not candles_closed:
         failures.append("A decisão aguarda o fechamento do candle.")
     if opportunity.side not in {"BUY", "SELL"}:

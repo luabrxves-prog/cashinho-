@@ -93,6 +93,10 @@ class Settings(BaseSettings):
         return PROJECT_ROOT / "data"
 
     @property
+    def operational_policy_path(self) -> Path:
+        return self.data_dir / "reports" / "deep_study" / "operational_policy.json"
+
+    @property
     def mode_is_implemented(self) -> bool:
         return self.mode in IMPLEMENTED_MODES
 

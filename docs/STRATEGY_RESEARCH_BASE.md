@@ -47,6 +47,14 @@ trading e explicacao clara na interface.
    candle aberto, dado velho, CSV sintetico ou qualidade bloqueada precisam
    aparecer na interface como motivo de estudo, nunca como entrada real.
 
+7. Mente, metodo e dinheiro precisam virar trava de sistema.
+
+   A lista de livros da Clear destaca Alexander Elder, Mark Douglas, John Murphy,
+   Martin Pring, estudos de candlestick e livros sobre gestao de risco. No
+   Cashinho, isso vira desenho de produto: plano claro, controle emocional
+   automatizado, leitura tecnica explicavel e bloqueios historicos quando a
+   maquina encontra contexto ruim.
+
 ## Como isso vira regra no app
 
 O fluxo de liberacao deve continuar nesta ordem:
@@ -59,7 +67,8 @@ O fluxo de liberacao deve continuar nesta ordem:
 6. Gatilho de entrada.
 7. Risco/retorno minimo.
 8. Tamanho de posicao compativel com o capital atual.
-9. PAPER antes de qualquer modo real.
+9. Base historica operacional.
+10. PAPER antes de qualquer modo real.
 
 ## Perfil inicial de R$100
 
@@ -84,6 +93,8 @@ Cashinho deve bloquear a boleta.
 - Liquidez no fracionario para entradas pequenas.
 - Backtests com dados reais de B3, nao fixtures sinteticas.
 - Resultados separados por ativo, horario, volatilidade e regime de mercado.
+- Politica operacional gerada automaticamente a partir dos backtests de 2020 a
+  2026, com bloqueios por horario, ativo, regime, volatilidade e timeframe.
 - Diario de erros: entrada antecipada, stop mal colocado, ativo sem liquidez,
   noticia, horario ruim e ansiedade operacional.
 
@@ -103,3 +114,5 @@ Cashinho deve bloquear a boleta.
   https://vantharpinstitute.com/tools/position-sizing-calculator/
 - IBD/Yahoo Finance, regra publica de corte de perdas de William O'Neil:
   https://finance.yahoo.com/news/why-cutting-stock-losses-short-211000887.html
+- Clear, lista de livros para traders e temas de estudo:
+  https://master.clear.com.br/livros-para-traders/

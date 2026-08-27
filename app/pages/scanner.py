@@ -16,6 +16,7 @@ from cashinho.pipeline.final_decision import make_final_decision
 from cashinho.pipeline.indicators import IndicatorSelection
 from cashinho.pipeline.market_data import load_market_data
 from cashinho.pipeline.multi_timeframe import advise_timeframe, analyze_timeframes
+from cashinho.pipeline.operational_policy import load_operational_policy
 from cashinho.pipeline.opportunities import build_opportunity
 from cashinho.pipeline.paper_ticket import calculate_ticket_sizing
 from cashinho.pipeline.study_mode import build_market_study
@@ -26,6 +27,7 @@ page_header("Ranking de oportunidades", "Contexto, timeframe e priorização em 
 clock = SystemClock()
 choice = build_market_data_provider(settings, clock, fixtures_root=settings.data_dir / "fixtures")
 provider = choice.provider
+operational_policy = load_operational_policy(settings.operational_policy_path)
 selection = IndicatorSelection(
     ema_periods=(9, 21), vwap=True, rsi_period=14, macd=True, atr_period=14
 )
@@ -137,6 +139,16 @@ if st.button(
         data_status = item["data_status"]
         risk_approved = bool(item["risk_approved"])
         market_study = build_market_study(analyses_by_symbol, side=advice.side)
+        selected = item["selected"]
+        policy_decision = operational_policy.evaluate(
+            symbol=symbol,
+            timestamp=item["decision_timestamp"],
+            timeframe=advice.recommended_timeframe,
+            side=advice.side,
+            regime=selected.regime.regime.value if selected is not None else None,
+            volatility=selected.regime.volatility if selected is not None else None,
+            display_timezone=settings.display_timezone,
+        )
         opportunity = build_opportunity(
             symbol=symbol,
             advice=advice,
@@ -152,13 +164,15 @@ if st.button(
             candles_closed=True,
             market_approved=market_study.approved,
             market_reason=market_study.reason,
+            operational_policy_approved=policy_decision.approved,
+            operational_policy_reason=policy_decision.summary,
             extra_reasons=(
                 f"Modo Estudo Profundo: {market_study.summary}",
                 f"Conta de estudo: {item['risk_note']}",
+                f"Base historica: {policy_decision.summary}",
             ),
             minimum_risk_reward=settings.risk_profile().min_risk_reward,
         )
-        selected = item["selected"]
         strongest = item["strongest"]
         study_status = (
             selected.signal.status
@@ -182,6 +196,7 @@ if st.button(
             "market": market_study.summary,
             "market_reason": market_study.reason,
             "risk": item["risk_note"],
+            "policy": policy_decision.summary,
         }
         journal_audit_service().record_decision(decision, mode=Mode.RESEARCH)
         decisions.append(decision)
@@ -220,6 +235,7 @@ if ranking:
             "Observação": item.primary_reason,
             "Mercado amplo": study_meta.get(item.symbol, {}).get("market_reason", "—"),
             "Conta R$100": study_meta.get(item.symbol, {}).get("risk", "—"),
+            "Base histórica": study_meta.get(item.symbol, {}).get("policy", "—"),
         }
         for item in ranking
     ]
@@ -246,6 +262,10 @@ if ranking:
         )
         st.warning(
             f"Modo Estudo Profundo: {meta.get('market_reason')} {meta.get('risk')}",
+            icon="❔",
+        )
+        st.warning(
+            f"Base histórica: {meta.get('policy')}",
             icon="❔",
         )
     st.caption(study_meta.get(selected.symbol, {}).get("note", ""))
