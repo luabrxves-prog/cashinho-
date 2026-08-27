@@ -26,6 +26,8 @@ A validação contra situações históricas fica em
 [`docs/HISTORICAL_SCENARIO_TESTING.md`](docs/HISTORICAL_SCENARIO_TESTING.md).
 Ela roda uma bateria de cenários via `scripts/run_scenario_suite.py` e marca
 como `SKIP` qualquer janela que ainda não tenha CSV real local.
+Com o MT5 aberto, `scripts/export_mt5_history.py` exporta candles reais para
+`data/historical/` antes da bateria.
 
 ## Requisitos
 

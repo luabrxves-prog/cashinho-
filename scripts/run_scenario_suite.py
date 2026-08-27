@@ -307,9 +307,17 @@ def main() -> int:
         default=ROOT / "data" / "reports" / "scenario_suite.md",
         help="Destino do relatorio Markdown.",
     )
+    parser.add_argument(
+        "--only",
+        default="",
+        help="Lista de IDs separados por virgula para rodar somente alguns cenarios.",
+    )
     args = parser.parse_args()
 
     scenarios = load_scenarios(args.config)
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",") if item.strip()}
+        scenarios = tuple(scenario for scenario in scenarios if scenario.id in wanted)
     reports = tuple(run_scenario(scenario) for scenario in scenarios)
     markdown = render_markdown(reports)
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -28,6 +28,12 @@ O `timestamp` precisa estar em ISO-8601 com fuso, por exemplo:
 python scripts/run_scenario_suite.py
 ```
 
+Para rodar apenas alguns cenarios:
+
+```powershell
+python scripts/run_scenario_suite.py --only b3_circuit_breaker_2020_03,post_circuit_recovery_2020_04
+```
+
 O relatorio sai em:
 
 ```text
@@ -58,6 +64,19 @@ O arquivo versionado em `docs/scenario_suite.example.json` traz:
 
 Para esses cenarios virarem prova real, exporte os candles historicos do MT5 ou
 de outra fonte confiavel para `data/historical/`.
+
+Com o MetaTrader 5 aberto e autenticado, a exportacao pode ser feita por:
+
+```powershell
+python scripts/export_mt5_history.py
+```
+
+Por padrao, o script exporta `PETR4`, `VALE3`, `ITUB4` e `BOVA11` nos timeframes
+`5m`, `15m`, `60m` e `1D`, desde 2012-01-02 ate hoje. Para mudar:
+
+```powershell
+python scripts/export_mt5_history.py --symbols PETR4,VALE3 --timeframes 5m,15m,60m,1D --start 2020-01-01
+```
 
 ## Referencias
 
