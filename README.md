@@ -31,6 +31,8 @@ Com o MT5 aberto, `scripts/export_mt5_history.py` exporta candles reais para
 A bateria ampliada de 2020 a 2026 fica em
 [`docs/scenario_suite_2020_2026.json`](docs/scenario_suite_2020_2026.json), com
 contexto de noticias em [`docs/news_catalysts_2020_2026.json`](docs/news_catalysts_2020_2026.json).
+O diagnostico por ativo, ano, mes, horario, regime e motivo de saida fica em
+[`docs/BACKTEST_DIAGNOSTICS.md`](docs/BACKTEST_DIAGNOSTICS.md).
 
 ## Requisitos
 
