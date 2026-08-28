@@ -5,6 +5,9 @@ historica padrao do Cashinho. Ele nao prova resultado futuro e nao autoriza
 dinheiro real; serve para bloquear contextos que a propria maquina encontrou
 como ruins.
 
+O desenho completo do sistema profissional fica em
+[`PROFESSIONAL_TRADING_SYSTEM.md`](PROFESSIONAL_TRADING_SYSTEM.md).
+
 ## Comando executado
 
 ```powershell

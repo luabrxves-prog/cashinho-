@@ -35,6 +35,8 @@ O diagnostico por ativo, ano, mes, horario, regime e motivo de saida fica em
 [`docs/BACKTEST_DIAGNOSTICS.md`](docs/BACKTEST_DIAGNOSTICS.md).
 O estudo operacional 2020-2026 usado como base do Scanner B3 fica em
 [`docs/DEEP_STUDY_2020_2026.md`](docs/DEEP_STUDY_2020_2026.md).
+O desenho do sistema profissional de apoio a decisao fica em
+[`docs/PROFESSIONAL_TRADING_SYSTEM.md`](docs/PROFESSIONAL_TRADING_SYSTEM.md).
 
 ## Requisitos
 

@@ -40,6 +40,8 @@ def make_final_decision(
     market_reason: str | None = None,
     operational_policy_approved: bool = True,
     operational_policy_reason: str | None = None,
+    opportunity_quality_approved: bool = True,
+    opportunity_quality_reason: str | None = None,
     extra_reasons: tuple[str, ...] = (),
     minimum_confidence: int = 60,
     minimum_risk_reward: Decimal = Decimal("1.5"),
@@ -54,6 +56,11 @@ def make_final_decision(
         failures.append(
             operational_policy_reason
             or "A base de estudo histórico bloqueou este contexto operacional."
+        )
+    if not opportunity_quality_approved:
+        failures.append(
+            opportunity_quality_reason
+            or "A qualidade profissional da oportunidade ainda não permite entrada."
         )
     if not candles_closed:
         failures.append("A decisão aguarda o fechamento do candle.")

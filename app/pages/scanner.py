@@ -18,6 +18,7 @@ from cashinho.pipeline.market_data import load_market_data
 from cashinho.pipeline.multi_timeframe import advise_timeframe, analyze_timeframes
 from cashinho.pipeline.operational_policy import load_operational_policy
 from cashinho.pipeline.opportunities import build_opportunity
+from cashinho.pipeline.opportunity_quality import assess_opportunity_quality
 from cashinho.pipeline.paper_ticket import calculate_ticket_sizing
 from cashinho.pipeline.study_mode import build_market_study
 
@@ -162,6 +163,14 @@ if st.button(
             risk_approved=risk_approved,
             timestamp=item["decision_timestamp"],
         )
+        quality = assess_opportunity_quality(
+            opportunity,
+            data_status=data_status,
+            risk_approved=risk_approved,
+            market_study=market_study,
+            policy_decision=policy_decision,
+            selected_analysis=selected,
+        )
         decision = make_final_decision(
             opportunity,
             data_quality_approved=data_status is not DataStatus.BLOCKED,
@@ -171,10 +180,13 @@ if st.button(
             market_reason=market_study.reason,
             operational_policy_approved=policy_decision.approved,
             operational_policy_reason=policy_decision.summary,
+            opportunity_quality_approved=quality.approved_for_entry,
+            opportunity_quality_reason=quality.summary,
             extra_reasons=(
                 f"Modo Estudo Profundo: {market_study.summary}",
                 f"Conta de estudo: {item['risk_note']}",
                 f"Base historica: {policy_decision.summary}",
+                f"Qualidade profissional: {quality.alert_level.value} ({quality.total_score}/100)",
             ),
             minimum_risk_reward=settings.risk_profile().min_risk_reward,
         )
@@ -202,6 +214,10 @@ if st.button(
             "market_reason": market_study.reason,
             "risk": item["risk_note"],
             "policy": policy_decision.summary,
+            "quality_score": quality.total_score,
+            "alert_level": quality.alert_level.value,
+            "missing": ", ".join(quality.missing_confirmations) or "Nenhuma.",
+            "quality_factors": quality.factors,
         }
         journal_audit_service().record_decision(decision, mode=Mode.RESEARCH)
         decisions.append(decision)
@@ -209,7 +225,7 @@ if st.button(
         decisions,
         key=lambda item: (
             item.should_enter,
-            study_meta.get(item.symbol, {}).get("score", item.confidence),
+            study_meta.get(item.symbol, {}).get("quality_score", item.confidence),
         ),
         reverse=True,
     )
@@ -235,7 +251,8 @@ if ranking:
             "Timeframe": study_meta.get(item.symbol, {}).get(
                 "timeframe", item.timeframe.value if item.timeframe else "—"
             ),
-            "Confiança": study_meta.get(item.symbol, {}).get("score", item.confidence),
+            "Qualidade": study_meta.get(item.symbol, {}).get("quality_score", item.confidence),
+            "Alerta": study_meta.get(item.symbol, {}).get("alert_level", "—"),
             "R:R": item.risk_reward if item.risk_reward is not None else "—",
             "Observação": item.primary_reason,
             "Mercado amplo": study_meta.get(item.symbol, {}).get("market_reason", "—"),
@@ -273,6 +290,17 @@ if ranking:
             f"Base histórica: {meta.get('policy')}",
             icon="❔",
         )
+        st.info(
+            f"Alerta: **{meta.get('alert_level')}** · Qualidade "
+            f"**{meta.get('quality_score')}/100** · Falta: {meta.get('missing')}",
+            icon="❔",
+        )
+        with st.expander("Qualidade da oportunidade"):
+            for factor in meta.get("quality_factors", ()):
+                st.write(
+                    f"**{factor.name}: {factor.score}/{factor.maximum}** — "
+                    f"{factor.plain_language}"
+                )
     st.caption(study_meta.get(selected.symbol, {}).get("note", ""))
     with st.expander("Por que essa decisão?"):
         st.caption(

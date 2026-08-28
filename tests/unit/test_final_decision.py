@@ -57,6 +57,7 @@ def test_entrada_valida(side: str) -> None:
         ({}, {"data_quality_approved": False}, "qualidade"),
         ({}, {"market_approved": False}, "mercado"),
         ({}, {"operational_policy_approved": False}, "base de estudo"),
+        ({}, {"opportunity_quality_approved": False}, "qualidade"),
         ({}, {"risk_approved": False}, "Risk Manager"),
         ({"risk_reward": 1.0}, {}, "risco/retorno"),
     ],
