@@ -22,6 +22,7 @@ def test_diagnostico_classifica_horario_regime_e_resultado() -> None:
     assert diagnostics[0].year == "2026"
     assert diagnostics[0].hour == "07:00"
     assert diagnostics[0].result_bucket == "WIN"
+    assert diagnostics[0].setup_type == "NO_CLEAR_SETUP"
     assert diagnostics[0].regime
 
 

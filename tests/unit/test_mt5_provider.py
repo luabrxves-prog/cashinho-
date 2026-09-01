@@ -397,6 +397,25 @@ def test_o_corte_respeita_a_duracao_do_timeframe() -> None:
     assert series.has_open_candle is True
 
 
+def test_candle_futuro_filtrado_nao_fecha_candle_em_formacao() -> None:
+    """Linha futura fora da janela nao pode adiantar o relogio do provider."""
+    current = rate(0)
+    current["time"] = int(server_epoch(NOW - timedelta(minutes=1)))
+    future = rate(0)
+    future["time"] = int(server_epoch(NOW + timedelta(minutes=1)))
+    library = FakeMetaTrader5(rates=[current, future])
+
+    series = build(library).get_candles(
+        "PETR4",
+        Timeframe.M2,
+        start=NOW - timedelta(minutes=5),
+        end=NOW,
+    )
+
+    assert len(series) == 1
+    assert series.has_open_candle is True
+
+
 @pytest.mark.parametrize("timeframe", list(Timeframe))
 def test_todos_os_timeframes_do_dominio_sao_mapeados(timeframe: Timeframe) -> None:
     """Candles espacados pela duracao do proprio timeframe, todos fechados."""

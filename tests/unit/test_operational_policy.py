@@ -41,6 +41,32 @@ def test_politica_bloqueia_horario_historicamente_ruim() -> None:
     assert "10:00" in decision.summary
 
 
+def test_politica_bloqueia_faixa_de_score_mal_calibrada() -> None:
+    rule = OperationalPolicyRule(
+        dimension="score_bucket",
+        bucket="90-100",
+        action="BLOCK",
+        reason="Score alto falhou no estudo.",
+        total_trades=12,
+        win_rate=Decimal("20"),
+        profit_factor=Decimal("0.30"),
+        net_profit=Decimal("-4"),
+        max_drawdown_pct=Decimal("5"),
+    )
+    policy = OperationalPolicy("2026-08-27T00:00:00+00:00", "teste", (rule,))
+
+    decision = policy.evaluate(
+        symbol="PETR4",
+        timestamp=datetime(2026, 8, 20, 13, tzinfo=UTC),
+        timeframe=Timeframe.M5,
+        side="BUY",
+        score=95,
+    )
+
+    assert not decision.approved
+    assert "Score alto" in decision.summary
+
+
 def test_salva_e_carrega_politica(tmp_path) -> None:  # type: ignore[no-untyped-def]
     path = tmp_path / "policy.json"
     policy = OperationalPolicy(

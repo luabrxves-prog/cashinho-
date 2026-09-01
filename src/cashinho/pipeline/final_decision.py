@@ -24,6 +24,12 @@ class FinalDecision:
     primary_reason: str
     reasons: tuple[str, ...]
     timestamp: datetime
+    setup_type: str = "NO_CLEAR_SETUP"
+    planned_side: str = "NONE"
+    planned_entry: Decimal | None = None
+    planned_stop: Decimal | None = None
+    planned_target: Decimal | None = None
+    planned_risk_reward: float | None = None
 
     @property
     def state(self) -> str:
@@ -110,4 +116,10 @@ def make_final_decision(
         primary,
         reasons,
         opportunity.timestamp,
+        opportunity.setup_type,
+        opportunity.side,
+        opportunity.entry,
+        opportunity.stop,
+        opportunity.target,
+        opportunity.risk_reward,
     )

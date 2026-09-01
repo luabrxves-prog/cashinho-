@@ -87,11 +87,16 @@ class FakeMetaTrader5:
     COPY_TICKS_INFO = 1
     COPY_TICKS_TRADE = 2
     TIMEFRAME_M1 = 1
+    TIMEFRAME_M2 = 2
     TIMEFRAME_M5 = 5
+    TIMEFRAME_M10 = 10
     TIMEFRAME_M15 = 15
     TIMEFRAME_M30 = 30
     TIMEFRAME_H1 = 16385
     TIMEFRAME_D1 = 16408
+    ACCOUNT_TRADE_MODE_DEMO = 0
+    ACCOUNT_TRADE_MODE_CONTEST = 1
+    ACCOUNT_TRADE_MODE_REAL = 2
     __version__ = "5.0.45"
 
     def __init__(
@@ -147,7 +152,7 @@ class FakeMetaTrader5:
             "Account",
             (),
             {"server": "GenialInvestimentos-PRD", "login": 123456,
-             "balance": 98765.43},
+             "balance": 98765.43, "trade_mode": self.ACCOUNT_TRADE_MODE_REAL},
         )()
 
     def symbols_get(self) -> list[Any]:

@@ -22,9 +22,6 @@ from cashinho.config.settings import Settings
 from cashinho.ports.clock import Clock
 from cashinho.ports.market_data import MarketDataProvider
 
-INITIAL_SYMBOLS: tuple[str, ...] = ("PETR4",)
-"""Ativos integrados ao feed em tempo real nesta fase."""
-
 
 @dataclass(frozen=True)
 class ProviderChoice:
@@ -34,6 +31,7 @@ class ProviderChoice:
     kind: str
     realtime: bool
     reason: str
+    monitored_symbols: tuple[str, ...] = ()
 
     @property
     def is_metatrader(self) -> bool:
@@ -44,11 +42,10 @@ class ProviderChoice:
 
         O MetaTrader expoe milhares de simbolos da corretora; despejar todos
         num seletor nao ajuda ninguem e ainda convida a escolher o fracionario
-        por engano. Nesta fase a integracao comeca por PETR4, declarado - o
-        scanner completo da B3 e outra etapa.
+        por engano. Em tempo real, usamos a lista liquida configurada.
         """
         if self.is_metatrader:
-            return INITIAL_SYMBOLS
+            return self.monitored_symbols
         lister = getattr(self.provider, "list_symbols", None)
         return tuple(lister()) if lister is not None else ()
 
@@ -76,6 +73,7 @@ def build_market_data_provider(
             kind="metatrader",
             realtime=True,
             reason="CASHINHO_MT5_ENABLED=true",
+            monitored_symbols=settings.monitored_symbols,
         )
 
     root = fixtures_root or (Path("data") / "fixtures")

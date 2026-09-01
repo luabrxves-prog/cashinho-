@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from cashinho.domain.enums import DataStatus
+from cashinho.pipeline.market_regime import MarketRegime
 from cashinho.pipeline.multi_timeframe import TimeframeAnalysis
 from cashinho.pipeline.operational_policy import OperationalPolicyDecision
 from cashinho.pipeline.opportunities import Opportunity
 from cashinho.pipeline.study_mode import MarketStudy
+from cashinho.pipeline.trade_setup import TradeSetupType
 
 
 class AlertLevel(StrEnum):
@@ -179,14 +181,51 @@ def _confluence_factor(
     regime_score = selected_analysis.regime.confidence if selected_analysis is not None else 0
     combined = int((technical_score * 0.7) + (regime_score * 0.3))
     score = min(20, max(0, combined // 5))
-    approved = score >= 14 and len(opportunity.reasons) >= 2
+    regime = selected_analysis.regime.regime if selected_analysis is not None else None
+    setup = selected_analysis.setup if selected_analysis is not None else None
+    if regime is MarketRegime.RANGE:
+        valid_range_setups = {
+            TradeSetupType.RANGE_REVERSION,
+            TradeSetupType.VWAP_REVERSION,
+            TradeSetupType.SUPPORT_RESISTANCE_REVERSAL,
+        }
+        if setup is not None and setup.kind in valid_range_setups and setup.approved:
+            score = min(20, max(score, setup.score // 5))
+            approved = True
+            explanation = "Range aprovado apenas com reversao, VWAP ou suporte/resistencia."
+            plain = "Mercado lateral so entra perto das bordas ou voltando para a VWAP."
+        else:
+            score = min(score, 8)
+            approved = False
+            explanation = "Regime lateral exige setup especifico; rompimento comum nao basta."
+            plain = "Quando o mercado esta andando de lado, o app precisa de uma entrada propria de range."
+    elif regime is MarketRegime.HIGH_VOLATILITY:
+        valid_expansion_setups = {
+            TradeSetupType.EXPANSION_BREAKOUT,
+            TradeSetupType.BREAKOUT_RETEST,
+            TradeSetupType.OPENING_RANGE_EXPANSION,
+        }
+        if setup is not None and setup.kind in valid_expansion_setups and setup.approved:
+            score = min(20, max(score, setup.score // 5))
+            approved = True
+            explanation = "Alta volatilidade aceita apenas com expansao, reteste ou abertura forte."
+            plain = "Mercado agitado so entra se houver rompimento limpo, reteste ou abertura forte."
+        else:
+            score = min(score, 8)
+            approved = False
+            explanation = "Alta volatilidade sem expansao clara aumenta demais o risco da conta pequena."
+            plain = "Quando o mercado esta muito agitado, o app precisa esperar expansao mais limpa."
+    else:
+        approved = score >= 14 and len(opportunity.reasons) >= 2
+        explanation = f"{len(opportunity.reasons)} fator(es) tecnico(s) considerados."
+        plain = "O app exige varias evidencias juntas; um indicador isolado nao basta."
     return QualityFactor(
         "Confluencia",
         score,
         20,
         approved,
-        f"{len(opportunity.reasons)} fator(es) tecnico(s) considerados.",
-        "O app exige varias evidencias juntas; um indicador isolado nao basta.",
+        explanation,
+        plain,
     )
 
 
@@ -197,7 +236,7 @@ def _blocking_reasons(
 ) -> tuple[str, ...]:
     reasons = [*opportunity.rejection_reasons, *policy_decision.blocking_rules]
     for factor in factors:
-        if factor.name in {"Dados", "Base historica", "Risco"} and not factor.approved:
+        if factor.name in {"Dados", "Base historica", "Risco", "Confluencia"} and not factor.approved:
             reasons.append(f"{factor.name}: {factor.explanation}")
     return tuple(dict.fromkeys(reasons))
 

@@ -207,6 +207,16 @@ def test_tolerancia_escala_com_o_timeframe() -> None:
     assert checks.check_staleness(h1, now=depois) == []
 
 
+def test_staleness_usa_ultimo_candle_fechado() -> None:
+    fechado = make_candle(REFERENCE_INSTANT - timedelta(minutes=30))
+    aberto = make_candle(REFERENCE_INSTANT + timedelta(minutes=30), is_closed=False)
+    serie = _unsafe_series((fechado, aberto))
+
+    issues = checks.check_staleness(serie, now=REFERENCE_INSTANT)
+
+    assert issues[0].code == "STALE"
+
+
 # --- saltos de preco --------------------------------------------------
 
 
@@ -220,6 +230,37 @@ def test_salto_de_preco_gera_alerta() -> None:
 
 def test_variacao_normal_nao_alerta() -> None:
     assert checks.check_price_jumps(make_series(count=10)) == []
+
+
+def test_candle_fechado_no_futuro_e_critico() -> None:
+    futuro = make_candle(REFERENCE_INSTANT + timedelta(minutes=5), is_closed=True)
+    issues = checks.check_future_closed_candles(
+        _unsafe_series((futuro,)),
+        now=REFERENCE_INSTANT,
+    )
+    assert issues[0].code == "FUTURE_CANDLE"
+    assert issues[0].severity is Severity.CRITICAL
+
+
+def test_candle_aberto_vencido_e_critico() -> None:
+    vencido = make_candle(
+        REFERENCE_INSTANT - timedelta(minutes=10),
+        is_closed=False,
+    )
+    issues = checks.check_open_candle_state(
+        _unsafe_series((vencido,)),
+        now=REFERENCE_INSTANT,
+    )
+    assert issues[0].code == "STALE_OPEN_CANDLE"
+    assert issues[0].severity is Severity.CRITICAL
+
+
+def test_candle_aberto_em_formacao_passa() -> None:
+    aberto = make_candle(REFERENCE_INSTANT, is_closed=False)
+    assert checks.check_open_candle_state(
+        _unsafe_series((aberto,)),
+        now=REFERENCE_INSTANT + timedelta(minutes=1),
+    ) == []
 
 
 # --- fronteira de entrada ---------------------------------------------

@@ -46,11 +46,12 @@ PAGES = [
     st.Page("pages/scanner.py", title="Scanner B3", icon="🔎"),
     st.Page("pages/analise.py", title="Análise", icon="📈"),
     st.Page("pages/backtest.py", title="Backtest", icon="🧪"),
+    st.Page("pages/aprendizado.py", title="Aprendizado", icon="🧠"),
     st.Page("pages/paper_trading.py", title="Paper Trading", icon="📝"),
     st.Page("pages/diario.py", title="Diário", icon="📒"),
     st.Page("pages/risk_manager.py", title="Risk Manager", icon="🛡️"),
     st.Page("pages/configuracoes.py", title="Configurações", icon="⚙️"),
-    st.Page("pages/system_health.py", title="System Health", icon="🩺"),
+    st.Page("pages/system_health.py", title="Saúde do Mercado", icon="🩺"),
 ]
 
 navigation = st.navigation(PAGES, position="sidebar")

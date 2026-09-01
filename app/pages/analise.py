@@ -60,7 +60,9 @@ INSPECTION_MODE = Mode.RESEARCH
 
 _TIMEFRAME_LABELS = {
     Timeframe.M1: "1m · muito curto, usado para gatilhos",
+    Timeframe.M2: "2m · gatilho muito curto",
     Timeframe.M5: "5m · curto, padrão da tela de análise",
+    Timeframe.M10: "10m · curto com menos ruído que 5m",
     Timeframe.M15: "15m · leitura operacional mais estável",
     Timeframe.M30: "30m · contexto intradiário",
     Timeframe.H1: "60m · contexto de tendência",
@@ -94,6 +96,7 @@ choice = build_market_data_provider(
 
 provider = choice.provider
 display_timezone = ZoneInfo(settings.display_timezone)
+LOAD_MODE = settings.mode if choice.realtime else INSPECTION_MODE
 
 
 @st.cache_data(ttl=5, show_spinner=False)
@@ -105,6 +108,7 @@ def cached_market_data(
     timeframe_value: str,
     start_value: datetime,
     end_value: datetime,
+    mode_value: str,
 ):
     """Cache curto para conter reruns do Streamlit sem congelar o feed."""
     return load_market_data(
@@ -114,7 +118,7 @@ def cached_market_data(
         start=start_value,
         end=end_value,
         clock=_clock,
-        mode=INSPECTION_MODE,
+        mode=Mode(mode_value),
     )
 
 
@@ -595,6 +599,7 @@ try:
         timeframe_value=timeframe.value,
         start_value=start,
         end_value=end,
+        mode_value=LOAD_MODE.value,
     )
 
 except (ProviderError, CashinhoError) as exc:
@@ -675,6 +680,7 @@ for context_timeframe in available:
         timeframe_value=context_timeframe.value,
         start_value=start,
         end_value=end,
+        mode_value=LOAD_MODE.value,
     )
     if context_result.usable_series is not None:
         quality_statuses.append(context_result.report.status)
@@ -705,6 +711,7 @@ for market_symbol in symbols:
                 timeframe_value=market_timeframe.value,
                 start_value=start,
                 end_value=end,
+                mode_value=LOAD_MODE.value,
             )
         except (ProviderError, CashinhoError):
             continue

@@ -62,13 +62,17 @@ TICK_LOOKBACK_MINUTES = 30
 """Janela de ticks consultada para montar a cotacao."""
 
 DEFAULT_STALE_SECONDS = 60
+MAX_CANDLE_CLOCK_SKEW_SECONDS = 2
+"""Folga para virada de candle entre o relogio local e o terminal."""
 
 _CANDLES_PER_DAY: dict[Timeframe, int] = {
     Timeframe.M1: 400,
+    Timeframe.M2: 220,
     Timeframe.M5: 80,
+    Timeframe.M10: 44,
     Timeframe.M15: 28,
-    Timeframe.M30: 14,
-    Timeframe.H1: 8,
+    Timeframe.M30: 18,
+    Timeframe.H1: 12,
     Timeframe.D1: 1,
 }
 
@@ -437,7 +441,12 @@ class MetaTraderMarketDataProvider:
     def _rates_snapshot_time(
         self, rows: tuple[dict[str, Any], ...], fallback: datetime
     ) -> datetime:
-        """Instante minimo da foto dos candles retornados pelo MT5."""
+        """Instante da foto dos candles retornados pelo MT5.
+
+        O terminal pode mostrar o candle novo milissegundos antes do relogio
+        local virar. Aceitamos essa pequena folga. Um candle inteiro no futuro
+        nao pode, porem, fazer candles em formacao parecerem fechados.
+        """
         opened_at: list[datetime] = []
         for row in rows:
             raw_time = row.get("time")
@@ -447,7 +456,13 @@ class MetaTraderMarketDataProvider:
                 opened_at.append(self._time.to_utc(raw_time))
             except (TypeError, ValueError, OverflowError):
                 continue
-        return max((fallback, *opened_at))
+        newest = max(opened_at, default=None)
+        if newest is None:
+            return fallback
+        drift = (newest - fallback).total_seconds()
+        if 0 < drift <= MAX_CANDLE_CLOCK_SKEW_SECONDS:
+            return newest
+        return fallback
 
     def _candle_count(self, timeframe: Timeframe, start: datetime, end: datetime) -> int:
         """Quantos candles pedir ao terminal para cobrir o intervalo."""

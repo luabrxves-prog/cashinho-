@@ -34,10 +34,63 @@ from cashinho.adapters.providers.metatrader.terminal import (  # noqa: E402
 )
 from cashinho.config.settings import get_settings  # noqa: E402
 from cashinho.domain.enums import Timeframe  # noqa: E402
+from cashinho.pipeline.data_provenance import MT5_PROVENANCE_FILE, MT5_SOURCE  # noqa: E402
 
-DEFAULT_SYMBOLS = ("PETR4", "VALE3", "ITUB4", "BOVA11")
+DEFAULT_SYMBOLS = (
+    "ABEV3",
+    "BBAS3",
+    "BBDC3",
+    "BBDC4",
+    "BOVA11",
+    "BRFS3",
+    "B3SA3",
+    "CCRO3",
+    "CMIG4",
+    "CPLE6",
+    "CSNA3",
+    "ELET3",
+    "ELET6",
+    "EMBR3",
+    "GGBR4",
+    "HAPV3",
+    "ITSA4",
+    "ITUB4",
+    "JBSS3",
+    "LREN3",
+    "MGLU3",
+    "PETR3",
+    "PETR4",
+    "PRIO3",
+    "RADL3",
+    "RENT3",
+    "SMAL11",
+    "SUZB3",
+    "USIM5",
+    "VALE3",
+    "VIVT3",
+    "WEGE3",
+)
 DEFAULT_TIMEFRAMES = (Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.D1)
 CSV_HEADER = ("timestamp", "open", "high", "low", "close", "volume")
+PROVENANCE_HEADER = (
+    "source",
+    "status",
+    "requested_symbol",
+    "resolved_symbol",
+    "timeframe",
+    "rows",
+    "requested_start",
+    "requested_end",
+    "first_candle",
+    "last_candle",
+    "exported_at",
+    "terminal_company",
+    "terminal_server",
+    "terminal_version",
+    "account_mode",
+    "broker_timezone",
+    "message",
+)
 
 
 def _parse_date(raw: str) -> date:
@@ -110,7 +163,7 @@ def export_symbol_timeframe(
     end: datetime,
     output_root: Path,
     chunk_days: int,
-) -> int:
+) -> dict[str, object]:
     resolution = resolve_symbol(requested_symbol, terminal.symbols())
     terminal.select(resolution.resolved)
     constant_name = TIMEFRAME_CONSTANTS[timeframe]
@@ -157,7 +210,71 @@ def export_symbol_timeframe(
 
     exact = "exato" if resolution.exact else f"resolvido como {resolution.resolved}"
     print(f"[ok] {requested_symbol:<6} {timeframe.value:<3} {len(rows):>7} candles ({exact})")
-    return len(rows)
+    return {
+        "requested_symbol": requested_symbol,
+        "resolved_symbol": resolution.resolved,
+        "timeframe": timeframe.value,
+        "rows": len(rows),
+        "first_candle": rows[0]["timestamp"] if rows else "",
+        "last_candle": rows[-1]["timestamp"] if rows else "",
+        "status": "ok",
+        "message": exact,
+    }
+
+
+def _failure_metadata(
+    *,
+    requested_symbol: str,
+    timeframe: Timeframe,
+    message: str,
+) -> dict[str, object]:
+    return {
+        "requested_symbol": requested_symbol,
+        "resolved_symbol": "",
+        "timeframe": timeframe.value,
+        "rows": 0,
+        "first_candle": "",
+        "last_candle": "",
+        "status": "failed",
+        "message": message,
+    }
+
+
+def _write_provenance(
+    *,
+    output_root: Path,
+    rows: list[dict[str, object]],
+    requested_start: datetime,
+    requested_end: datetime,
+    exported_at: datetime,
+    terminal_company: str,
+    terminal_server: str,
+    terminal_version: str,
+    account_mode: str,
+    broker_timezone: str,
+) -> Path:
+    output_root.mkdir(parents=True, exist_ok=True)
+    path = output_root / MT5_PROVENANCE_FILE
+    enriched_rows = [
+        {
+            "source": MT5_SOURCE,
+            "requested_start": requested_start.isoformat(),
+            "requested_end": requested_end.isoformat(),
+            "exported_at": exported_at.isoformat(),
+            "terminal_company": terminal_company,
+            "terminal_server": terminal_server,
+            "terminal_version": terminal_version,
+            "account_mode": account_mode,
+            "broker_timezone": broker_timezone,
+            **row,
+        }
+        for row in rows
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=PROVENANCE_HEADER)
+        writer.writeheader()
+        writer.writerows(enriched_rows)
+    return path
 
 
 def main() -> int:
@@ -194,10 +311,11 @@ def main() -> int:
 
     exported = 0
     failures = 0
+    provenance_rows: list[dict[str, object]] = []
     for symbol in symbols:
         for timeframe in timeframes:
             try:
-                exported += export_symbol_timeframe(
+                metadata = export_symbol_timeframe(
                     library=library,
                     terminal=terminal,
                     normalizer=normalizer,
@@ -208,13 +326,35 @@ def main() -> int:
                     output_root=args.output,
                     chunk_days=args.chunk_days,
                 )
+                exported += int(metadata["rows"])
+                provenance_rows.append(metadata)
             except (AmbiguousSymbolError, SymbolNotFoundError, AttributeError, ValueError) as exc:
                 failures += 1
+                provenance_rows.append(
+                    _failure_metadata(
+                        requested_symbol=symbol,
+                        timeframe=timeframe,
+                        message=str(exc),
+                    )
+                )
                 print(f"[falha] {symbol:<6} {timeframe.value:<3} {exc}")
 
+    provenance_path = _write_provenance(
+        output_root=args.output,
+        rows=provenance_rows,
+        requested_start=start,
+        requested_end=end,
+        exported_at=datetime.now(UTC),
+        terminal_company=info.company,
+        terminal_server=info.server,
+        terminal_version=info.version,
+        account_mode=info.account_mode,
+        broker_timezone=settings.mt5_server_timezone,
+    )
     print("=" * 72)
     print(f"Exportados: {exported} candles")
     print(f"Falhas: {failures}")
+    print(f"Comprovante: {provenance_path}")
     return 1 if exported == 0 else 0
 
 

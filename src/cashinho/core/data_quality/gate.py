@@ -50,6 +50,8 @@ def evaluate(
         issues.extend(checks.check_insufficient(series, minimum_candles))
         issues.extend(checks.check_gaps(series, session_bounds=session_bounds))
         issues.extend(checks.check_price_jumps(series))
+        issues.extend(checks.check_future_closed_candles(series, now=clock.now()))
+        issues.extend(checks.check_open_candle_state(series, now=clock.now()))
         if mode.requires_realtime_data:
             issues.extend(checks.check_staleness(series, now=clock.now()))
 
@@ -73,6 +75,16 @@ def evaluate(
             "candles": len(series),
         },
     )
+    if report.blocked:
+        logger.warning(
+            "sinal bloqueado por qualidade de dados",
+            extra={
+                "symbol": series.symbol,
+                "timeframe": series.timeframe.value,
+                "source": series.source,
+                "reasons": [issue.model_dump(mode="json") for issue in report.critical_issues],
+            },
+        )
     return report
 
 

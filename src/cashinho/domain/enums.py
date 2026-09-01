@@ -39,7 +39,9 @@ class Timeframe(StrEnum):
     """Timeframes suportados."""
 
     M1 = "1m"
+    M2 = "2m"
     M5 = "5m"
+    M10 = "10m"
     M15 = "15m"
     M30 = "30m"
     H1 = "60m"
@@ -62,7 +64,9 @@ class Timeframe(StrEnum):
 
 _TIMEFRAME_DURATION: dict[Timeframe, timedelta] = {
     Timeframe.M1: timedelta(minutes=1),
+    Timeframe.M2: timedelta(minutes=2),
     Timeframe.M5: timedelta(minutes=5),
+    Timeframe.M10: timedelta(minutes=10),
     Timeframe.M15: timedelta(minutes=15),
     Timeframe.M30: timedelta(minutes=30),
     Timeframe.H1: timedelta(hours=1),
@@ -71,7 +75,9 @@ _TIMEFRAME_DURATION: dict[Timeframe, timedelta] = {
 
 _TIMEFRAME_FREQ: dict[Timeframe, str] = {
     Timeframe.M1: "1min",
+    Timeframe.M2: "2min",
     Timeframe.M5: "5min",
+    Timeframe.M10: "10min",
     Timeframe.M15: "15min",
     Timeframe.M30: "30min",
     Timeframe.H1: "60min",

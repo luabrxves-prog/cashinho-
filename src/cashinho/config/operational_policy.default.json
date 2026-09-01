@@ -1,50 +1,50 @@
 {
-  "generated_at": "2026-08-27T21:58:37.245159+00:00",
+  "generated_at": "2026-08-31T22:37:11.122793+00:00",
   "rules": [
     {
       "action": "BLOCK",
-      "bucket": "10:00",
-      "dimension": "hour",
-      "max_drawdown_pct": "2.54",
-      "net_profit": "-0.66",
-      "profit_factor": "0.86",
-      "reason": "Bloqueio: horario 10:00 foi ruim no estudo historico (26 trades).",
-      "total_trades": 26,
-      "win_rate": "34.62"
+      "bucket": "80-89",
+      "dimension": "score_bucket",
+      "max_drawdown_pct": "2.39",
+      "net_profit": "-2.26",
+      "profit_factor": "0.38",
+      "reason": "Bloqueio: faixa de score 80-89 foi ruim no estudo historico (10 trades).",
+      "total_trades": 10,
+      "win_rate": "30.00"
+    },
+    {
+      "action": "BLOCK",
+      "bucket": "RANGE_REVERSION",
+      "dimension": "setup_type",
+      "max_drawdown_pct": "2.98",
+      "net_profit": "-2.64",
+      "profit_factor": "0.30",
+      "reason": "Bloqueio: setup RANGE_REVERSION foi ruim no estudo historico (11 trades).",
+      "total_trades": 11,
+      "win_rate": "18.18"
     },
     {
       "action": "BLOCK",
       "bucket": "RANGE",
       "dimension": "regime",
-      "max_drawdown_pct": "8.04",
-      "net_profit": "-4.05",
-      "profit_factor": "0.74",
-      "reason": "Bloqueio: regime RANGE foi ruim no estudo historico (48 trades).",
-      "total_trades": 48,
-      "win_rate": "31.25"
+      "max_drawdown_pct": "2.98",
+      "net_profit": "-2.64",
+      "profit_factor": "0.30",
+      "reason": "Bloqueio: regime RANGE foi ruim no estudo historico (11 trades).",
+      "total_trades": 11,
+      "win_rate": "18.18"
     },
     {
       "action": "BLOCK",
-      "bucket": "TREND_UP",
-      "dimension": "regime",
-      "max_drawdown_pct": "1.91",
-      "net_profit": "-0.73",
-      "profit_factor": "0.82",
-      "reason": "Bloqueio: regime TREND_UP foi ruim no estudo historico (16 trades).",
-      "total_trades": 16,
-      "win_rate": "25.00"
-    },
-    {
-      "action": "BLOCK",
-      "bucket": "LOW",
+      "bucket": "NORMAL",
       "dimension": "volatility",
-      "max_drawdown_pct": "2.27",
-      "net_profit": "-2.06",
-      "profit_factor": "0.38",
-      "reason": "Bloqueio: volatilidade LOW foi ruim no estudo historico (11 trades).",
+      "max_drawdown_pct": "3.92",
+      "net_profit": "-3.92",
+      "profit_factor": "0.11",
+      "reason": "Bloqueio: volatilidade NORMAL foi ruim no estudo historico (11 trades).",
       "total_trades": 11,
       "win_rate": "9.09"
     }
   ],
-  "source": "symbols=PETR4,VALE3,ITUB4,BOVA11 years=2020,2021,2022,2023,2024,2025,2026 timeframes=15m,60m,1D decision_timeframe=60m max_decision_points=300 market_context=False"
+  "source": "symbols=PETR4,VALE3,ITUB4,BOVA11 years=2020,2021,2022,2023,2024,2025,2026 timeframes=5m,15m,60m,1D decision_timeframe=5m max_decision_points=40 validation_mode=FAST_VALIDATION market_context=True quality_gate=True minimum_entry_score=80 input_policy=none primary_cost=REALISTA cost_scenarios=REALISTA"
 }

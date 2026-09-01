@@ -67,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(f"{OK} terminal conectado    {info.company}")
     print(f"{OK} servidor              {info.server}")
+    print(f"{OK} modo da conta         {info.account_mode}")
 
     try:
         resolution = provider.resolve(args.symbol)
@@ -109,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         ultimo = fechados.last
         print(f"{OK} candles {timeframe.value:<13} {len(fechados)} fechado(s)"
               + (f", ultimo {_local(ultimo.open_time, settings)} "
+                 f"fecha {_local(ultimo.close_time, settings)} "
                  f"close {ultimo.close}" if ultimo else ""))
         if series.has_open_candle:
             print(f"{OK} candle em formacao    marcado como aberto, nao entregue "

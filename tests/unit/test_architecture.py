@@ -94,7 +94,7 @@ def test_todas_as_paginas_declaradas_existem() -> None:
         and node.args
         and isinstance(node.args[0], ast.Constant)
     ]
-    assert len(declaradas) == 9, f"esperadas 9 paginas, encontradas {len(declaradas)}"
+    assert len(declaradas) == 10, f"esperadas 10 paginas, encontradas {len(declaradas)}"
     ausentes = [p for p in declaradas if not (APP / p).is_file()]
     assert not ausentes, f"paginas declaradas e ausentes: {ausentes}"
 

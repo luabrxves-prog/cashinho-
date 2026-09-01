@@ -26,6 +26,20 @@ from cashinho.domain.risk import RiskProfile
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 """Raiz do repositorio (src/cashinho/config/settings.py -> tres niveis acima)."""
 
+DEFAULT_MONITORED_SYMBOLS: tuple[str, ...] = (
+    "PETR4",
+    "VALE3",
+    "ITUB4",
+    "BBDC4",
+    "BBAS3",
+    "ABEV3",
+    "WEGE3",
+    "PRIO3",
+    "B3SA3",
+    "RENT3",
+)
+"""Primeira cesta liquida para monitoramento em tempo real."""
+
 IMPLEMENTED_MODES: frozenset[Mode] = frozenset(
     {Mode.RESEARCH, Mode.BACKTEST, Mode.REPLAY, Mode.PAPER}
 )
@@ -57,7 +71,7 @@ class Settings(BaseSettings):
     # --- MetaTrader 5 (somente Market Data) -------------------------------
     # Nenhuma credencial da corretora aqui, e nao deve haver (regra 7): quem
     # autentica e o operador, no proprio terminal.
-    mt5_enabled: bool = False
+    mt5_enabled: bool = True
     mt5_terminal_path: str = ""
     """Caminho do terminal. Vazio deixa o MT5 localizar sozinho; preencher
     so quando houver mais de um MetaTrader instalado na maquina."""
@@ -75,6 +89,9 @@ class Settings(BaseSettings):
     mt5_refresh_seconds: int = Field(default=5, ge=1)
     """Intervalo de atualizacao das telas em tempo real."""
 
+    monitored_symbols: tuple[str, ...] = DEFAULT_MONITORED_SYMBOLS
+    """Ativos monitorados pelo Scanner quando o provider for tempo real."""
+
     @field_validator("log_level")
     @classmethod
     def _validate_log_level(cls, value: str) -> str:
@@ -83,6 +100,13 @@ class Settings(BaseSettings):
         if upper not in allowed:
             raise ValueError(f"log_level invalido: {value!r}; use um de {sorted(allowed)}")
         return upper
+
+    @field_validator("monitored_symbols", mode="before")
+    @classmethod
+    def _parse_monitored_symbols(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(item.strip().upper() for item in value.split(",") if item.strip())
+        return value
 
     @property
     def project_root(self) -> Path:
@@ -138,6 +162,8 @@ class Settings(BaseSettings):
                 "mode": self.mode.value,
                 "capital": str(self.capital),
                 "display_timezone": self.display_timezone,
+                "mt5_enabled": self.mt5_enabled,
+                "monitored_symbols": self.monitored_symbols,
                 "risk_profile": self.risk_profile().model_dump(mode="json"),
             },
             sort_keys=True,

@@ -59,6 +59,13 @@ def test_modo_com_tempo_real_verifica_atraso() -> None:
     assert any(i.code == "STALE" for i in report.issues)
 
 
+def test_bloqueia_candle_fechado_no_futuro(frozen_clock: FrozenClock) -> None:
+    serie = make_series(count=30, end=frozen_clock.now() + timedelta(hours=1))
+    report = evaluate(serie, clock=frozen_clock, mode=Mode.RESEARCH)
+    assert report.blocked
+    assert any(i.code == "FUTURE_CANDLE" for i in report.issues)
+
+
 def test_modo_historico_ignora_atraso() -> None:
     """BACKTEST sobre dado antigo e o caso normal, nao um defeito."""
     serie = make_series(count=30, end=REFERENCE_INSTANT)

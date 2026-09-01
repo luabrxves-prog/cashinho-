@@ -30,7 +30,9 @@ TICKS_TRADE = "COPY_TICKS_TRADE"
 
 TIMEFRAME_CONSTANTS: dict[Timeframe, str] = {
     Timeframe.M1: "TIMEFRAME_M1",
+    Timeframe.M2: "TIMEFRAME_M2",
     Timeframe.M5: "TIMEFRAME_M5",
+    Timeframe.M10: "TIMEFRAME_M10",
     Timeframe.M15: "TIMEFRAME_M15",
     Timeframe.M30: "TIMEFRAME_M30",
     Timeframe.H1: "TIMEFRAME_H1",
@@ -58,6 +60,7 @@ class TerminalInfo:
     company: str = ""
     server: str = ""
     version: str = ""
+    account_mode: str = "DESCONHECIDO"
     reason: str = ""
 
     def as_dict(self) -> dict[str, Any]:
@@ -66,6 +69,7 @@ class TerminalInfo:
             "company": self.company,
             "server": self.server,
             "version": self.version,
+            "account_mode": self.account_mode,
             "reason": self.reason,
         }
 
@@ -90,7 +94,7 @@ class MetaTraderTerminal:
         if self._library is not None:
             return self._library
         try:
-            import MetaTrader5  # type: ignore[import-not-found]
+            import MetaTrader5  # type: ignore[import-untyped]
         except ImportError as exc:
             raise MetaTraderUnavailableError(
                 "METATRADER NAO DISPONIVEL: a biblioteca MetaTrader5 nao esta "
@@ -140,11 +144,13 @@ class MetaTraderTerminal:
 
         account = library.account_info()
         server = str(getattr(account, "server", "") or "") if account else ""
+        account_mode = _account_mode_label(library, getattr(account, "trade_mode", None))
         return TerminalInfo(
             connected=bool(getattr(info, "connected", False)),
             company=str(getattr(info, "company", "") or ""),
             server=server,
             version=str(getattr(library, "__version__", "") or ""),
+            account_mode=account_mode,
         )
 
     def shutdown(self) -> None:
@@ -218,6 +224,21 @@ class MetaTraderTerminal:
         except Exception:
             return "erro desconhecido do MT5"
         return f"MT5 [{code}] {message}"
+
+
+def _account_mode_label(library: Any, value: object) -> str:
+    if value is None:
+        return "DESCONHECIDO"
+    demo = getattr(library, "ACCOUNT_TRADE_MODE_DEMO", 0)
+    contest = getattr(library, "ACCOUNT_TRADE_MODE_CONTEST", 1)
+    real = getattr(library, "ACCOUNT_TRADE_MODE_REAL", 2)
+    if value == demo:
+        return "DEMO"
+    if value == real:
+        return "REAL"
+    if value == contest:
+        return "CONTEST"
+    return "DESCONHECIDO"
 
 
 def _as_dict(record: Any) -> dict[str, Any]:

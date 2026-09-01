@@ -27,6 +27,8 @@ class DiagnosticTrade:
     hour: str
     side: str
     timeframe: str
+    score_bucket: str
+    setup_type: str
     close_reason: str
     regime: str
     volatility: str
@@ -61,6 +63,8 @@ def classify_trade(
         hour=f"{local.hour:02d}:00",
         side=trade.side,
         timeframe=trade.timeframe.value,
+        score_bucket=_score_bucket(trade.score),
+        setup_type=trade.setup_type,
         close_reason=trade.close_reason,
         regime=regime.value,
         volatility=volatility,
@@ -125,6 +129,8 @@ def diagnostic_tables(
         "symbol",
         "side",
         "timeframe",
+        "score_bucket",
+        "setup_type",
         "close_reason",
         "regime",
         "volatility",
@@ -149,6 +155,8 @@ def _dimension_getter(dimension: str) -> Callable[[DiagnosticTrade], str]:
         "symbol",
         "side",
         "timeframe",
+        "score_bucket",
+        "setup_type",
         "close_reason",
         "regime",
         "volatility",
@@ -156,6 +164,20 @@ def _dimension_getter(dimension: str) -> Callable[[DiagnosticTrade], str]:
     }:
         raise ValueError(f"dimensao de diagnostico invalida: {dimension}")
     return lambda item: str(getattr(item, dimension))
+
+
+def _score_bucket(score: int) -> str:
+    if score < 50:
+        return "00-49"
+    if score < 60:
+        return "50-59"
+    if score < 70:
+        return "60-69"
+    if score < 80:
+        return "70-79"
+    if score < 90:
+        return "80-89"
+    return "90-100"
 
 
 def _regime_for(

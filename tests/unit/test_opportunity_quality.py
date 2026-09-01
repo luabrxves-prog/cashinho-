@@ -65,6 +65,34 @@ def _analysis() -> TimeframeAnalysis:
     return TimeframeAnalysis(Timeframe.M15, regime, _panel_signal())
 
 
+def _range_analysis() -> TimeframeAnalysis:
+    regime = RegimeAnalysis(
+        MarketRegime.RANGE,
+        80,
+        "BUY",
+        80,
+        "LATERAL",
+        "NORMAL",
+        ("Mercado lateral.",),
+        {},
+    )
+    return TimeframeAnalysis(Timeframe.M15, regime, _panel_signal())
+
+
+def _high_volatility_analysis() -> TimeframeAnalysis:
+    regime = RegimeAnalysis(
+        MarketRegime.HIGH_VOLATILITY,
+        80,
+        "SELL",
+        80,
+        "INDEFINIDA",
+        "HIGH",
+        ("Volatilidade alta.",),
+        {},
+    )
+    return TimeframeAnalysis(Timeframe.M15, regime, _panel_signal())
+
+
 def _panel_signal():
     from cashinho.pipeline.entry_signal import evaluate_entry_signal
 
@@ -117,3 +145,33 @@ def test_qualidade_bloqueia_quando_base_historica_bloqueia() -> None:
     assert quality.alert_level is AlertLevel.NO_TRADE
     assert not quality.approved_for_entry
     assert "10:00" in quality.summary
+
+
+def test_qualidade_nao_libera_rompimento_comum_em_range() -> None:
+    quality = assess_opportunity_quality(
+        _opportunity(),
+        data_status=DataStatus.OK,
+        risk_approved=True,
+        market_study=_market(),
+        policy_decision=OperationalPolicyDecision(True),
+        selected_analysis=_range_analysis(),
+    )
+
+    assert quality.alert_level is AlertLevel.NO_TRADE
+    assert not quality.approved_for_entry
+    assert "Regime lateral" in quality.summary
+
+
+def test_qualidade_nao_libera_alta_volatilidade_sem_expansao() -> None:
+    quality = assess_opportunity_quality(
+        _opportunity(side="SELL"),
+        data_status=DataStatus.OK,
+        risk_approved=True,
+        market_study=_market(),
+        policy_decision=OperationalPolicyDecision(True),
+        selected_analysis=_high_volatility_analysis(),
+    )
+
+    assert quality.alert_level is AlertLevel.NO_TRADE
+    assert not quality.approved_for_entry
+    assert "Alta volatilidade" in quality.summary

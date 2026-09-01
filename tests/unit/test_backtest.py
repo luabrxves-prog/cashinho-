@@ -248,6 +248,7 @@ def trade(net: str, result_r: str, index: int) -> BacktestTrade:
         symbol="PETR4",
         side="BUY",
         timeframe=Timeframe.M5,
+        score=80,
         signal_at=START,
         entered_at=START + timedelta(minutes=index * 10),
         exited_at=START + timedelta(minutes=index * 10 + 5),
@@ -290,6 +291,28 @@ def test_modelo_de_custos_reduz_resultado() -> None:
         costs=ExecutionCostModel(spread=Decimal("0.10"), slippage=Decimal("0.05")),
     )
     assert result.trades[0].net_pnl < result.trades[0].gross_pnl
+
+
+def test_dimensionamento_considera_custos_para_conta_pequena() -> None:
+    profile = RiskProfile(
+        capital=Decimal("100"),
+        risk_per_trade_pct=Decimal("2"),
+        max_exposure_per_symbol_pct=Decimal("100"),
+    )
+    data = series(
+        market_candle(0, low="9.8", high="10.2"),
+        market_candle(1, low="8.5", high="10.5"),
+    )
+
+    result = run_backtest(
+        {Timeframe.M5: data},
+        FirstDecision(),
+        risk_profile=profile,
+        costs=ExecutionCostModel(spread=Decimal("0.10"), slippage=Decimal("0.05")),
+    )
+
+    assert result.trades[0].quantity == 1
+    assert abs(result.trades[0].net_pnl) <= profile.monetary_risk_per_trade
 
 
 def test_backtest_dinamico_reutiliza_position_manager_sem_lookahead() -> None:

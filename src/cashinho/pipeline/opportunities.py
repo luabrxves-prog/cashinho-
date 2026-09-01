@@ -28,6 +28,7 @@ class Opportunity:
     reasons: tuple[str, ...]
     rejection_reasons: tuple[str, ...]
     timestamp: datetime
+    setup_type: str = "NO_CLEAR_SETUP"
 
     @property
     def state(self) -> str:
@@ -55,6 +56,7 @@ def build_opportunity(
     selected = analyses.get(advice.recommended_timeframe) if advice.recommended_timeframe else None
     signal = selected.signal if selected else None
     regime = selected.regime.regime if selected else MarketRegime.INDETERMINATE
+    setup_type = selected.setup.kind.value if selected and selected.setup else "NO_CLEAR_SETUP"
     trigger = bool(signal and signal.trigger_confirmed and not rejection)
     score = advice.score + (10 if trigger else 0)
     return Opportunity(
@@ -73,6 +75,7 @@ def build_opportunity(
         advice.reasons,
         tuple(rejection),
         timestamp,
+        setup_type,
     )
 
 

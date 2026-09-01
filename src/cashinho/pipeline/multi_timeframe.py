@@ -9,6 +9,7 @@ from cashinho.domain.market import CandleSeries
 from cashinho.pipeline.entry_signal import EntrySignal, evaluate_entry_signal
 from cashinho.pipeline.indicators import IndicatorSelection, compute_panel
 from cashinho.pipeline.market_regime import RegimeAnalysis, analyze_market_regime
+from cashinho.pipeline.trade_setup import TradeSetup, classify_trade_setup
 
 TIMEFRAME_ORDER = (Timeframe.D1, Timeframe.H1, Timeframe.M15, Timeframe.M5, Timeframe.M1)
 
@@ -18,6 +19,7 @@ class TimeframeAnalysis:
     timeframe: Timeframe
     regime: RegimeAnalysis
     signal: EntrySignal
+    setup: TradeSetup | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,8 +43,13 @@ def analyze_timeframes(
         if closed.timeframe is not timeframe:
             raise ValueError("Serie associada ao timeframe incorreto.")
         panel = compute_panel(closed, selection)
+        regime = analyze_market_regime(closed)
+        signal = evaluate_entry_signal(closed, panel)
         analyses[timeframe] = TimeframeAnalysis(
-            timeframe, analyze_market_regime(closed), evaluate_entry_signal(closed, panel)
+            timeframe,
+            regime,
+            signal,
+            classify_trade_setup(closed, panel, regime, signal),
         )
     return analyses
 

@@ -19,12 +19,23 @@ from cashinho.pipeline.backtest_diagnostics import DiagnosticTrade, diagnostic_t
 
 PolicyAction = Literal["BLOCK", "WARN"]
 
-DEFAULT_DIMENSIONS = ("symbol", "hour", "side", "timeframe", "regime", "volatility")
+DEFAULT_DIMENSIONS = (
+    "symbol",
+    "hour",
+    "side",
+    "timeframe",
+    "score_bucket",
+    "setup_type",
+    "regime",
+    "volatility",
+)
 DEFAULT_MIN_TRADES = {
     "symbol": 12,
     "hour": 8,
     "side": 12,
     "timeframe": 12,
+    "score_bucket": 8,
+    "setup_type": 6,
     "regime": 8,
     "volatility": 8,
 }
@@ -71,6 +82,8 @@ class OperationalPolicy:
         timestamp: datetime,
         timeframe: Timeframe | None,
         side: str,
+        score: int | None = None,
+        setup_type: str | None = None,
         regime: str | None = None,
         volatility: str | None = None,
         display_timezone: str = "America/Sao_Paulo",
@@ -80,6 +93,8 @@ class OperationalPolicy:
             timestamp=timestamp,
             timeframe=timeframe,
             side=side,
+            score=score,
+            setup_type=setup_type,
             regime=regime,
             volatility=volatility,
             display_timezone=display_timezone,
@@ -182,6 +197,8 @@ def _context_values(
     timestamp: datetime,
     timeframe: Timeframe | None,
     side: str,
+    score: int | None,
+    setup_type: str | None,
     regime: str | None,
     volatility: str | None,
     display_timezone: str,
@@ -192,6 +209,8 @@ def _context_values(
         "hour": f"{local.hour:02d}:00",
         "side": side,
         "timeframe": timeframe.value if timeframe else "",
+        "score_bucket": _score_bucket(score) if score is not None else "",
+        "setup_type": setup_type or "",
         "regime": regime or "",
         "volatility": volatility or "",
     }
@@ -226,10 +245,26 @@ def _rule_reason(
         "hour": "horario",
         "side": "lado",
         "timeframe": "timeframe",
+        "score_bucket": "faixa de score",
+        "setup_type": "setup",
         "regime": "regime",
         "volatility": "volatilidade",
     }.get(dimension, dimension)
     return f"{prefix}: {label} {bucket} foi ruim no estudo historico ({total_trades} trades)."
+
+
+def _score_bucket(score: int) -> str:
+    if score < 50:
+        return "00-49"
+    if score < 60:
+        return "50-59"
+    if score < 70:
+        return "60-69"
+    if score < 80:
+        return "70-79"
+    if score < 90:
+        return "80-89"
+    return "90-100"
 
 
 def _rule_to_dict(rule: OperationalPolicyRule) -> dict[str, object]:

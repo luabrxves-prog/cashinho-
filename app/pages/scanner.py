@@ -15,6 +15,7 @@ from cashinho.domain.enums import DataStatus, Mode
 from cashinho.pipeline.final_decision import make_final_decision
 from cashinho.pipeline.indicators import IndicatorSelection
 from cashinho.pipeline.market_data import load_market_data
+from cashinho.pipeline.monitoring_schedule import cadence_for_alert
 from cashinho.pipeline.multi_timeframe import advise_timeframe, analyze_timeframes
 from cashinho.pipeline.operational_policy import load_operational_policy
 from cashinho.pipeline.opportunities import build_opportunity
@@ -72,7 +73,7 @@ if st.button(
                 start=start,
                 end=end,
                 clock=clock,
-                mode=Mode.RESEARCH,
+                mode=settings.mode if choice.realtime else Mode.RESEARCH,
             )
             if result.usable_series is not None:
                 statuses.append(result.report.status)
@@ -151,6 +152,8 @@ if st.button(
             timestamp=item["decision_timestamp"],
             timeframe=advice.recommended_timeframe,
             side=advice.side,
+            score=advice.score,
+            setup_type=selected.setup.kind.value if selected is not None and selected.setup else None,
             regime=selected.regime.regime.value if selected is not None else None,
             volatility=selected.regime.volatility if selected is not None else None,
             display_timezone=settings.display_timezone,
@@ -170,6 +173,10 @@ if st.button(
             market_study=market_study,
             policy_decision=policy_decision,
             selected_analysis=selected,
+        )
+        cadence = cadence_for_alert(
+            quality.alert_level,
+            base_refresh_seconds=settings.mt5_refresh_seconds,
         )
         decision = make_final_decision(
             opportunity,
@@ -216,6 +223,8 @@ if st.button(
             "policy": policy_decision.summary,
             "quality_score": quality.total_score,
             "alert_level": quality.alert_level.value,
+            "monitoring_state": cadence.state.value,
+            "refresh_seconds": cadence.refresh_seconds,
             "missing": ", ".join(quality.missing_confirmations) or "Nenhuma.",
             "quality_factors": quality.factors,
         }
@@ -253,6 +262,7 @@ if ranking:
             ),
             "Qualidade": study_meta.get(item.symbol, {}).get("quality_score", item.confidence),
             "Alerta": study_meta.get(item.symbol, {}).get("alert_level", "—"),
+            "Monitoramento": study_meta.get(item.symbol, {}).get("monitoring_state", "—"),
             "R:R": item.risk_reward if item.risk_reward is not None else "—",
             "Observação": item.primary_reason,
             "Mercado amplo": study_meta.get(item.symbol, {}).get("market_reason", "—"),
@@ -292,7 +302,9 @@ if ranking:
         )
         st.info(
             f"Alerta: **{meta.get('alert_level')}** · Qualidade "
-            f"**{meta.get('quality_score')}/100** · Falta: {meta.get('missing')}",
+            f"**{meta.get('quality_score')}/100** · "
+            f"Monitoramento: **{meta.get('monitoring_state')}** "
+            f"({meta.get('refresh_seconds')}s) · Falta: {meta.get('missing')}",
             icon="❔",
         )
         with st.expander("Qualidade da oportunidade"):

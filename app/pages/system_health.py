@@ -1,13 +1,13 @@
-"""System Health — estado tecnico verificavel."""
+"""Saude do Mercado — estado tecnico verificavel."""
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from app.components.chrome import page_header, sidebar
-from app.components.feed import render_feed_status
 from cashinho.adapters.persistence.session import (
     create_db_engine,
     init_db,
@@ -17,6 +17,8 @@ from cashinho.adapters.providers.factory import build_market_data_provider
 from cashinho.config.settings import get_settings
 from cashinho.core.time.b3_calendar import B3Calendar
 from cashinho.core.time.clocks import SystemClock
+from cashinho.domain.enums import Mode, Timeframe
+from cashinho.pipeline.market_health import MarketHealthColor, assess_market_health
 from cashinho.version import __version__
 
 MONITORED_SYMBOL = "PETR4"
@@ -24,10 +26,10 @@ MONITORED_SYMBOL = "PETR4"
 
 settings = get_settings()
 sidebar(settings)
-page_header("System Health", "Estado tecnico verificavel do sistema")
+page_header("Saúde do Mercado", "Prova se o app está lendo dados atuais do MT5")
 st.caption(
-    "Diagnóstico técnico do app: relógio, banco de dados e fonte de mercado. "
-    "Use esta tela quando algo parecer desatualizado."
+    "Antes de qualquer entrada, esta tela precisa estar saudável. Se o semáforo "
+    "ficar vermelho, o Cashinho bloqueia sinais ao vivo."
 )
 
 clock = SystemClock()
@@ -75,14 +77,83 @@ try:
 except Exception as exc:  # a tela deve mostrar a falha, nao quebrar
     st.error(f"Falha ao conectar: {exc}", icon="⛔")
 
-st.subheader("Dados de mercado")
-st.caption("Mostra se o app está usando MT5 ao vivo ou uma fonte histórica/local.")
 choice = build_market_data_provider(settings, clock)
-st.write(f"Provider ativo: `{choice.provider.capabilities.name}` — {choice.reason}")
-render_feed_status(choice, MONITORED_SYMBOL, settings.display_timezone)
-st.caption(
-    "O Cashinho nao inventa cotacoes e nao apresenta preco antigo como atual. "
-    "Fonte sem tempo real nao habilita decisao ao vivo."
+symbols = choice.offered_symbols() or (MONITORED_SYMBOL,)
+display_timezone = ZoneInfo(settings.display_timezone)
+
+st.subheader("Saúde do Mercado")
+st.caption("Mostra se o app está usando MT5 ao vivo ou uma fonte histórica/local.")
+col_symbol, col_tf = st.columns(2)
+symbol = col_symbol.selectbox(
+    "Símbolo",
+    symbols,
+    index=symbols.index(MONITORED_SYMBOL) if MONITORED_SYMBOL in symbols else 0,
+    help="Ativo usado nesta checagem de saúde do feed.",
+)
+timeframe = col_tf.selectbox(
+    "Timeframe",
+    tuple(Timeframe),
+    index=tuple(Timeframe).index(Timeframe.M5),
+    format_func=lambda item: item.value,
+    help="Tamanho do candle usado para medir se os dados estão atuais.",
 )
 
-st.caption(f"Fuso interno: UTC · exibicao: {settings.display_timezone} · agora {now.astimezone(UTC).isoformat()}")
+health = assess_market_health(
+    choice,
+    symbol=symbol,
+    timeframe=timeframe,
+    start=now - timedelta(days=2),
+    end=now,
+    clock=clock,
+    mode=settings.mode if choice.realtime else Mode.RESEARCH,
+)
+
+if health.color is MarketHealthColor.GREEN:
+    st.success("VERDE — dados atuais", icon="🟢")
+elif health.color is MarketHealthColor.YELLOW:
+    st.warning("AMARELO — dados atrasados ou incompletos", icon="🟡")
+else:
+    offline = "TERMINAL OFFLINE. " if not health.mt5_connected else ""
+    st.error(
+        f"VERMELHO — dados inválidos para sinal ao vivo. {offline}{health.reason}",
+        icon="🔴",
+    )
+st.caption(health.reason)
+
+top = st.columns(4)
+top[0].metric("MT5 conectado", "SIM" if health.mt5_connected else "NÃO")
+top[1].metric("Conta conectada", "SIM" if health.mt5_connected else "NÃO")
+top[2].metric("Servidor", health.server or "—")
+top[3].metric("Modo", health.account_mode)
+
+mid = st.columns(4)
+mid[0].metric("Símbolo", health.symbol)
+mid[1].metric("Timeframe", health.timeframe.value)
+mid[2].metric("Spread atual", health.spread if health.spread is not None else "—")
+mid[3].metric("Candles carregados", health.candles_loaded)
+
+def _local(moment: object) -> str:
+    if not isinstance(moment, datetime):
+        return "—"
+    return moment.astimezone(display_timezone).strftime("%d/%m/%Y %H:%M:%S")
+
+
+age = "—" if health.data_age_seconds is None else f"{health.data_age_seconds:.0f}s"
+bottom = st.columns(4)
+bottom[0].metric("Horário atual", _local(health.current_time))
+bottom[1].metric("Último tick recebido", _local(health.last_tick_at))
+bottom[2].metric("Último candle recebido", _local(health.last_candle_at))
+bottom[3].metric("Idade do último dado", age)
+
+if health.data_quality is not None and health.data_quality.issues:
+    with st.expander("Problemas encontrados"):
+        for issue in health.data_quality.issues:
+            st.write(f"**{issue.code}** — {issue.message}")
+            if issue.evidence:
+                st.caption(issue.evidence)
+
+st.caption(
+    f"Provider ativo: `{choice.provider.capabilities.name}` — {choice.reason}. "
+    f"Fuso interno: UTC · exibição: {settings.display_timezone} · "
+    f"MT5: {settings.mt5_server_timezone} · agora UTC {now.astimezone(UTC).isoformat()}"
+)

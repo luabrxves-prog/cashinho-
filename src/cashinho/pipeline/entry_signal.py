@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from cashinho.domain.market import CandleSeries
+from cashinho.pipeline.fibonacci import fibonacci_confluence
 from cashinho.pipeline.indicators import IndicatorPanel
 
 
@@ -81,6 +82,15 @@ def evaluate_entry_signal(
     if volume_ok:
         buy_score += 15
         sell_score += 15
+
+    fib = fibonacci_confluence(candles)
+    if fib is not None:
+        if fib.side == "BUY":
+            buy_score += 10
+            buy.append(fib.reason)
+        else:
+            sell_score += 10
+            sell.append(fib.reason)
 
     if buy_score == sell_score:
         return EntrySignal(

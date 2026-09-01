@@ -20,6 +20,15 @@ def test_modo_padrao_e_paper() -> None:
     assert _settings().mode is Mode.PAPER
 
 
+def test_mt5_fica_ligado_por_padrao() -> None:
+    assert _settings().mt5_enabled is True
+
+
+def test_lista_monitorada_aceita_texto_com_virgulas() -> None:
+    settings = _settings(monitored_symbols="petr4, vale3, itub4")
+    assert settings.monitored_symbols == ("PETR4", "VALE3", "ITUB4")
+
+
 @pytest.mark.parametrize("mode", [Mode.LIVE, Mode.ASSISTED])
 def test_modos_com_ordem_real_sao_recusados(mode: Mode) -> None:
     settings = _settings(mode=mode)

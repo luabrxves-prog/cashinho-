@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from math import ceil
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from cashinho.domain.enums import DataStatus, Timeframe
 from cashinho.domain.errors import LookaheadError
@@ -34,6 +34,9 @@ from cashinho.pipeline.position_manager import (
     PositionRiskState,
 )
 from cashinho.pipeline.study_mode import build_market_study
+
+if TYPE_CHECKING:
+    from cashinho.pipeline.operational_policy import OperationalPolicy
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -81,6 +84,7 @@ class BacktestTrade:
     symbol: str
     side: str
     timeframe: Timeframe
+    score: int
     signal_at: datetime
     entered_at: datetime
     exited_at: datetime
@@ -97,6 +101,7 @@ class BacktestTrade:
     pnl_pct: Decimal
     result_in_r: Decimal
     duration: timedelta
+    setup_type: str = "NO_CLEAR_SETUP"
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +130,24 @@ class BacktestMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class BacktestDecisionLog:
+    symbol: str
+    timestamp: datetime
+    side: str
+    timeframe: Timeframe | None
+    score: int
+    setup_type: str
+    should_enter: bool
+    primary_reason: str
+    reasons: tuple[str, ...]
+    planned_side: str = "NONE"
+    planned_entry: Decimal | None = None
+    planned_stop: Decimal | None = None
+    planned_target: Decimal | None = None
+    planned_risk_reward: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class BacktestResult:
     trades: tuple[BacktestTrade, ...]
     metrics: BacktestMetrics
@@ -132,6 +155,7 @@ class BacktestResult:
     drawdown_curve: tuple[tuple[datetime, Decimal], ...]
     unfilled_signals: int = 0
     open_positions_at_end: int = 0
+    decisions: tuple[BacktestDecisionLog, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +199,10 @@ class PipelineDecisionEvaluator:
     data_quality_approved: bool = True
     minimum_confidence: int = 60
     market_series_by_symbol: dict[str, dict[Timeframe, CandleSeries]] | None = None
+    operational_policy: OperationalPolicy | None = None
+    use_opportunity_quality: bool = False
+    minimum_entry_score: int = 80
+    display_timezone: str = "America/Sao_Paulo"
     max_history_bars: int = 260
     _analysis_cache: dict[
         tuple[str, Timeframe, datetime | None, datetime | None, int], TimeframeAnalysis
@@ -241,6 +269,7 @@ class PipelineDecisionEvaluator:
         market_approved = True
         market_reason = None
         extra_reasons: tuple[str, ...] = ()
+        market_study = None
         if self.market_series_by_symbol:
             market_analyses: dict[str, dict[Timeframe, TimeframeAnalysis]] = {
                 next(iter(series_by_timeframe.values())).symbol: analyses
@@ -261,9 +290,54 @@ class PipelineDecisionEvaluator:
                         for timeframe, series in prefixes.items()
                     }
             study = build_market_study(market_analyses, side=advice.side)
+            market_study = study
             market_approved = study.approved
             market_reason = study.reason
             extra_reasons = (f"Modo Estudo Profundo: {study.summary}",)
+        operational_policy_approved = True
+        operational_policy_reason = None
+        policy_decision = None
+        if self.operational_policy is not None:
+            policy_decision = self.operational_policy.evaluate(
+                symbol=opportunity.symbol,
+                timestamp=decision_at,
+                timeframe=advice.recommended_timeframe,
+                side=advice.side,
+                score=opportunity.score,
+                setup_type=opportunity.setup_type,
+                regime=selected.regime.regime.value if selected is not None else None,
+                volatility=selected.regime.volatility if selected is not None else None,
+                display_timezone=self.display_timezone,
+            )
+            operational_policy_approved = policy_decision.approved
+            operational_policy_reason = policy_decision.summary
+
+        opportunity_quality_approved = True
+        opportunity_quality_reason = None
+        if self.use_opportunity_quality:
+            from cashinho.pipeline.operational_policy import OperationalPolicyDecision
+            from cashinho.pipeline.opportunity_quality import assess_opportunity_quality
+
+            quality = assess_opportunity_quality(
+                opportunity,
+                data_status=DataStatus.OK if self.data_quality_approved else DataStatus.BLOCKED,
+                risk_approved=risk_approved,
+                market_study=market_study
+                or build_market_study(
+                    {opportunity.symbol: analyses},
+                    side=advice.side,
+                    minimum_symbols_for_full_sample=1,
+                ),
+                policy_decision=policy_decision or OperationalPolicyDecision(True),
+                selected_analysis=selected,
+                minimum_entry_score=self.minimum_entry_score,
+            )
+            opportunity_quality_approved = quality.approved_for_entry
+            opportunity_quality_reason = quality.summary
+            extra_reasons = (
+                *extra_reasons,
+                f"Qualidade profissional: {quality.alert_level.value} ({quality.total_score}/100)",
+            )
         return make_final_decision(
             opportunity,
             data_quality_approved=self.data_quality_approved,
@@ -271,6 +345,10 @@ class PipelineDecisionEvaluator:
             candles_closed=True,
             market_approved=market_approved,
             market_reason=market_reason,
+            operational_policy_approved=operational_policy_approved,
+            operational_policy_reason=operational_policy_reason,
+            opportunity_quality_approved=opportunity_quality_approved,
+            opportunity_quality_reason=opportunity_quality_reason,
             extra_reasons=extra_reasons,
             minimum_confidence=self.minimum_confidence,
             minimum_risk_reward=self.risk_profile.min_risk_reward,
@@ -384,6 +462,7 @@ def _close_trade(
         symbol=decision.symbol,
         side=decision.side,
         timeframe=decision.timeframe,
+        score=decision.confidence,
         signal_at=decision.timestamp,
         entered_at=entered_at,
         exited_at=candle.close_time,
@@ -400,16 +479,41 @@ def _close_trade(
         pnl_pct=net_result.pnl_pct,
         result_in_r=net_result.result_in_r,
         duration=net_result.duration or timedelta(),
+        setup_type=decision.setup_type,
     )
 
 
-def _quantity_for(decision: FinalDecision, profile: RiskProfile) -> int:
+def _quantity_for(
+    decision: FinalDecision,
+    profile: RiskProfile,
+    costs: ExecutionCostModel,
+) -> int:
     assert decision.entry is not None and decision.stop is not None
-    return calculate_ticket_sizing(
+    quantity = calculate_ticket_sizing(
         entry=decision.entry,
         stop=decision.stop,
         profile=profile,
     ).quantity
+    if quantity <= 0:
+        return 0
+    max_loss = profile.monetary_risk_per_trade
+    for adjusted_quantity in range(quantity, 0, -1):
+        entry_execution = costs.entry_price(decision.entry, decision.side)
+        stop_execution = costs.exit_price(decision.stop, decision.side)
+        fees = costs.fees(entry_execution, stop_execution, adjusted_quantity)
+        stop_result = calculate_position_pnl(
+            side=decision.side,
+            entry_price=entry_execution,
+            exit_price=stop_execution,
+            stop=decision.stop,
+            quantity=adjusted_quantity,
+            entered_at=decision.timestamp,
+            exited_at=decision.timestamp,
+            costs=fees,
+        )
+        if abs(min(stop_result.pnl_value, ZERO)) <= max_loss:
+            return adjusted_quantity
+    return 0
 
 
 def _position_for_backtest(
@@ -486,6 +590,7 @@ def run_backtest(
     entered_at: datetime | None = None
     quantity = 0
     trades: list[BacktestTrade] = []
+    decisions: list[BacktestDecisionLog] = []
     seen: set[tuple[str, Timeframe | None, datetime, str]] = set()
     unfilled_signals = 0
 
@@ -494,25 +599,33 @@ def run_backtest(
             assert pending.entry is not None
             assert pending.stop is not None
             assert pending.target is not None
-            if entered_at is None and candle.low <= pending.entry <= candle.high:
+            pending_entry = pending.entry
+            pending_stop = pending.stop
+            pending_target = pending.target
+            if entered_at is None and candle.low <= pending_entry <= candle.high:
                 entered_at = candle.close_time
-                quantity = _quantity_for(pending, risk_profile)
+                quantity = _quantity_for(pending, risk_profile, cost_model)
+                if quantity <= 0:
+                    pending = None
+                    entered_at = None
+                    unfilled_signals += 1
+                    continue
 
             if entered_at is not None:
                 stop_hit = (
-                    candle.low <= pending.stop
+                    candle.low <= pending_stop
                     if pending.side == "BUY"
-                    else candle.high >= pending.stop
+                    else candle.high >= pending_stop
                 )
                 target_hit = (
-                    candle.high >= pending.target
+                    candle.high >= pending_target
                     if pending.side == "BUY"
-                    else candle.low <= pending.target
+                    else candle.low <= pending_target
                 )
                 if stop_hit or target_hit:
                     # Se ambos ocorrerem sem sequência intrabar, STOP é o cenário conservador.
                     reason = "STOP" if stop_hit else "TARGET"
-                    raw_exit = pending.stop if stop_hit else pending.target
+                    raw_exit = pending_stop if stop_hit else pending_target
                     trades.append(
                         _close_trade(
                             pending,
@@ -608,6 +721,24 @@ def run_backtest(
         decision = evaluator.evaluate(prefixes, as_of=candle.close_time)
         if decision.timestamp > candle.close_time:
             raise LookaheadError("FinalDecision foi produzida com timestamp futuro.")
+        decisions.append(
+            BacktestDecisionLog(
+                symbol=decision.symbol,
+                timestamp=decision.timestamp,
+                side=decision.side,
+                timeframe=decision.timeframe,
+                score=decision.confidence,
+                setup_type=decision.setup_type,
+                should_enter=decision.should_enter,
+                primary_reason=decision.primary_reason,
+                reasons=decision.reasons,
+                planned_side=decision.planned_side,
+                planned_entry=decision.planned_entry,
+                planned_stop=decision.planned_stop,
+                planned_target=decision.planned_target,
+                planned_risk_reward=decision.planned_risk_reward,
+            )
+        )
         key = _decision_key(decision)
         if decision.should_enter and key not in seen:
             if (
@@ -636,6 +767,7 @@ def run_backtest(
         drawdown,
         unfilled_signals=unfilled_signals,
         open_positions_at_end=int(pending is not None and entered_at is not None),
+        decisions=tuple(decisions),
     )
 
 

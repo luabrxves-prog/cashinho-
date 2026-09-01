@@ -228,7 +228,7 @@ def check_staleness(
 
     Aplicado apenas quando o modo exige dado ao vivo; o chamador decide.
     """
-    last = series.last
+    last = series.closed_only().last
     if last is None:
         return []
     tolerance = series.timeframe.duration * multiplier
@@ -266,6 +266,51 @@ def check_price_jumps(series: CandleSeries) -> list[DataQualityIssue]:
             message=(
                 f"{len(offenders)} saltos acima de {MAX_PRICE_JUMP_PCT}%; "
                 "verificar desdobramento, grupamento ou erro da fonte"
+            ),
+            evidence=", ".join(offenders[:3]),
+        )
+    ]
+
+
+def check_future_closed_candles(
+    series: CandleSeries, *, now: datetime
+) -> list[DataQualityIssue]:
+    """Candle fechado no futuro e look-ahead: bloqueia a decisao."""
+    offenders = [
+        candle.close_time.isoformat()
+        for candle in series.candles
+        if candle.is_closed and candle.close_time > now
+    ]
+    if not offenders:
+        return []
+    return [
+        DataQualityIssue(
+            code="FUTURE_CANDLE",
+            severity=Severity.CRITICAL,
+            message=f"{len(offenders)} candles fechados no futuro do relogio",
+            evidence=", ".join(offenders[:3]),
+        )
+    ]
+
+
+def check_open_candle_state(
+    series: CandleSeries, *, now: datetime
+) -> list[DataQualityIssue]:
+    """Candle aberto depois do fechamento esperado indica fuso/janela errados."""
+    offenders = [
+        candle.open_time.isoformat()
+        for candle in series.candles
+        if not candle.is_closed and candle.close_time <= now
+    ]
+    if not offenders:
+        return []
+    return [
+        DataQualityIssue(
+            code="STALE_OPEN_CANDLE",
+            severity=Severity.CRITICAL,
+            message=(
+                f"{len(offenders)} candles continuam abertos depois do fim "
+                "esperado do periodo"
             ),
             evidence=", ".join(offenders[:3]),
         )
