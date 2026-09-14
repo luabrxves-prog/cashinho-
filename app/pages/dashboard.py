@@ -1,9 +1,8 @@
 """Dashboard operacional baseado no diário e no Paper Broker."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
-
+from zoneinfo import ZoneInfo
 import streamlit as st
 
 from app.components.chrome import page_header, sidebar
@@ -19,141 +18,84 @@ from cashinho.domain.errors import CashinhoError
 from cashinho.pipeline.paper_market import collect_paper_market
 from cashinho.pipeline.paper_performance import summarize_orders
 
-MONITORED_SYMBOL = "PETR4"
-
 settings = get_settings()
 clock = SystemClock()
 sidebar(settings)
 page_header("Dashboard", "Decisões auditadas e operação PAPER")
-st.caption(
-    "Visão geral do que o Cashinho já decidiu, simulou e mantém em aberto. "
-    "Use os ícones de ajuda para entender cada número antes de agir."
-)
+choice = build_market_data_provider(settings, clock, fixtures_root=settings.data_dir / "fixtures")
 
-choice = build_market_data_provider(
-    settings, clock, fixtures_root=settings.data_dir / "fixtures"
-)
 feed_status = "HISTÓRICO"
 if choice.is_metatrader:
     try:
-        feed_status = choice.provider.feed_status(MONITORED_SYMBOL).value  # type: ignore[attr-defined]
+        feed_status = choice.provider.feed_status("PETR4").value  # type: ignore[attr-defined]
     except (CashinhoError, RuntimeError):
         feed_status = "OFFLINE"
 
 profile = settings.risk_profile()
-source_top = st.columns(3)
-source_top[0].metric(
-    "Provider",
-    choice.provider.capabilities.name,
-    help="Fonte de dados ativa agora. Pode ser MT5 em tempo real ou CSV histórico local.",
-)
-source_top[1].metric(
-    "Tempo real",
-    "SIM" if choice.provider.capabilities.supports_realtime else "NÃO",
-    help="Mostra se a fonte consegue trazer cotação atual do mercado.",
-)
-source_top[2].metric(
-    "Status do feed",
-    feed_status,
-    help="Estado do dado para o ativo monitorado. Offline ou histórico não deve ser tratado como ao vivo.",
-)
-account_top = st.columns(3)
-account_top[0].metric(
-    "Modo",
-    settings.mode.value,
-    help="Modo operacional carregado da configuração. Ele define quais travas do sistema ficam ativas.",
-)
-account_top[1].metric(
-    "Capital",
-    money(profile.capital),
-    help="Capital usado como base para calcular tamanho de posição e risco máximo.",
-)
-account_top[2].metric(
-    "Risco por operação",
-    f"{profile.risk_per_trade_pct}%",
-    help="Percentual máximo do capital que uma única operação PAPER pode arriscar.",
-)
+a, b, c = st.columns(3)
+a.metric("Provider", choice.provider.capabilities.name)
+b.metric("Tempo real", "SIM" if choice.provider.capabilities.supports_realtime else "NÃO")
+c.metric("Status do feed", feed_status)
+a, b, c = st.columns(3)
+a.metric("Modo", settings.mode.value)
+b.metric("Capital", money(profile.capital))
+c.metric("Risco por operação", f"{profile.risk_per_trade_pct}%")
 
-broker, _audit = build_paper_broker()
-orders = broker.list_orders()
-market = collect_paper_market(
-    choice.provider,
-    orders,
-    clock=clock,
-    max_age_seconds=settings.mt5_stale_seconds,
-)
-summary = summarize_orders(
-    orders,
-    market_prices=market.market_prices,
-    on_date=clock.now().date(),
-)
-with journal_session_factory()() as session:
-    repository = JournalRepository(session)
-    decisions = repository.list_recent_decisions(limit=20)
-    position_decisions = repository.list_recent_position_decisions(limit=20)
-    trades = repository.list_recent_paper_trades(limit=20)
-    today = clock.now().date()
-    day_start = datetime.combine(today, time.min, tzinfo=UTC)
-    released_today = repository.count_released_decisions(
-        start=day_start,
-        end=day_start + timedelta(days=1),
-    )
 
-st.divider()
-st.subheader("Resumo")
-st.caption("Números do dia e da carteira PAPER simulada. Eles não representam ordens reais.")
-first = st.columns(3)
-first[0].metric(
-    "Entradas liberadas hoje",
-    released_today,
-    help="Quantidade de decisões auditadas hoje que liberaram entrada.",
-)
-first[1].metric(
-    "Operações PAPER abertas",
-    summary.open_positions,
-    help="Posições simuladas que ainda estão abertas no Paper Broker.",
-)
-first[2].metric(
-    "P&L PAPER realizado",
-    money(summary.realized_pnl),
-    help="Resultado financeiro das operações PAPER já encerradas.",
-)
-second = st.columns(2)
-second[0].metric(
-    "P&L PAPER aberto",
-    money(summary.unrealized_pnl),
-    help="Resultado estimado das posições abertas usando a cotação disponível.",
-)
-second[1].metric(
-    "Risco em uso",
-    money(summary.exposed_risk),
-    help="Soma do risco que ainda está exposto nas posições simuladas.",
-)
-if summary.unpriced_positions:
-    st.caption("P&L aberto oculto porque não há cotação válida para todas as posições.")
+def _today_bounds_utc() -> tuple[datetime, datetime]:
+    tz = ZoneInfo(settings.display_timezone)
+    start = datetime.combine(clock.now().astimezone(tz).date(), time.min, tzinfo=tz)
+    return start.astimezone(UTC), (start + timedelta(days=1)).astimezone(UTC)
 
-st.divider()
-st.subheader("Últimas decisões")
-st.caption("Histórico recente do que a inteligência decidiu para análise, entrada ou posição.")
-if decisions or position_decisions:
-    st.dataframe(
-        operational_decision_rows(decisions, position_decisions)[:20],
-        use_container_width=True,
-        hide_index=True,
-    )
-else:
-    st.info("Nenhuma decisão operacional auditada ainda.")
 
-st.divider()
-st.subheader("Últimas operações")
-st.caption("Registros mais recentes de ordens e fechamentos no ambiente PAPER.")
-if trades:
-    st.dataframe(paper_trade_rows(trades), use_container_width=True, hide_index=True)
-else:
-    st.info("Nenhuma operação PAPER auditada ainda.")
+@st.fragment(run_every=f"{settings.mt5_refresh_seconds}s")
+def live_content() -> None:
+    broker, _audit = build_paper_broker()
+    orders = broker.list_orders()
+    market = collect_paper_market(choice.provider, orders, clock=clock, max_age_seconds=settings.mt5_stale_seconds)
+    summary = summarize_orders(orders, market_prices=market.market_prices, on_date=clock.now().date())
+    start, end = _today_bounds_utc()
+    with journal_session_factory()() as session:
+        repo = JournalRepository(session)
+        decisions = repo.list_recent_decisions(limit=100)
+        positions = repo.list_recent_position_decisions(limit=100)
+        trades = repo.list_recent_paper_trades(limit=100)
+        released_today = repo.count_released_decisions(start=start, end=end)
 
-with st.expander("Status detalhado do feed"):
-    st.caption(
-        "Mostra terminal, servidor, cotação e motivo do status da fonte de dados atual."
-    )
-    render_feed_status(choice, MONITORED_SYMBOL, settings.display_timezone)
+    left, right = st.columns([1, 4])
+    left.button("Atualizar agora", key="dashboard_refresh")
+    right.caption(f"Atualização automática a cada {settings.mt5_refresh_seconds}s")
+
+    st.divider()
+    st.subheader("Resumo")
+    a, b, c = st.columns(3)
+    a.metric("Entradas liberadas hoje", released_today)
+    b.metric("Operações PAPER abertas", summary.open_positions)
+    c.metric("Ordens pendentes", summary.pending_orders)
+    a, b, c = st.columns(3)
+    a.metric("P&L PAPER realizado", money(summary.realized_pnl))
+    b.metric("P&L PAPER aberto", money(summary.unrealized_pnl))
+    c.metric("Risco em uso", money(summary.exposed_risk))
+
+    st.divider()
+    st.subheader("Últimas decisões")
+    rows = operational_decision_rows(decisions, positions, settings.display_timezone)
+    if rows:
+        st.dataframe(rows[:50], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma decisão operacional auditada ainda.")
+
+    st.divider()
+    st.subheader("Últimas operações")
+    st.caption("Campos ainda inexistentes em ordens PENDING aparecem como —.")
+    rows = paper_trade_rows(trades, settings.display_timezone)
+    if rows:
+        st.dataframe(rows[:50], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma operação PAPER auditada ainda.")
+
+    with st.expander("Status detalhado do feed"):
+        render_feed_status(choice, "PETR4", settings.display_timezone)
+
+
+live_content()
